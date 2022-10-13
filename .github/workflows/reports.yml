@@ -1,12 +1,7 @@
 name: reports
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  push
 
 jobs:
   reports:
@@ -24,6 +19,8 @@ jobs:
         pip install -r requirements.txt
         pip install -r requirements_dev.txt
         pip install -e .
+    - name: Generate and push reports
+      run: |
         pytest --junitxml=.reports/junit/junit.xml --html=.reports/junit/report.html \
             --cov=tsk --cov-report xml:.reports/coverage/coverage.xml
         genbadge tests -i .reports/junit/junit.xml -o .reports/junit/badge.svg

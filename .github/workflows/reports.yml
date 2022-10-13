@@ -28,12 +28,13 @@ jobs:
         pip install -e .
     - name: Generate and push reports
       run: |
+        rm -r .reports # Clean report directory
         pytest --junitxml=.reports/tests/tests.xml --html=.reports/tests/report.html \
             --cov-report xml:.reports/coverage/coverage.xml  \
             --cov-report html:.reports/coverage/report # Other options are handled by pyproject.toml
         genbadge tests -i .reports/tests/tests.xml -o .reports/tests/badge.svg
         genbadge coverage -i .reports/coverage/coverage.xml -o .reports/coverage/badge.svg
-        rm .reports/coverage/report/.gitignore
+        rm -f .reports/coverage/report/.gitignore # -f in case .gitignore wasn't generated
         git config user.name github-actions
         git config user.email github-actions@github.com
         git add .reports

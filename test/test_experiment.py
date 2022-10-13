@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import tempfile
 
+import combinatorial_experiment
 from combinatorial_experiment import CombinatorialExperiment, variables
 
 def experiment_function(config):

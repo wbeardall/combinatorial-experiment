@@ -1,7 +1,14 @@
 name: reports
 
 on:
-  push
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
 
 jobs:
   reports:
@@ -21,9 +28,9 @@ jobs:
         pip install -e .
     - name: Generate and push reports
       run: |
-        pytest --junitxml=.reports/junit/junit.xml --html=.reports/junit/report.html \
-            --cov=tsk --cov-report xml:.reports/coverage/coverage.xml
-        genbadge tests -i .reports/junit/junit.xml -o .reports/junit/badge.svg
+        pytest --junitxml=.reports/tests/tests.xml --html=.reports/tests/report.html \
+            --cov-report xml:.reports/coverage/coverage.xml  # Other options are handled by pyproject.toml
+        genbadge tests -i .reports/tests/tests.xml -o .reports/tests/badge.svg
         genbadge coverage -i .reports/coverage/coverage.xml -o .reports/coverage/badge.svg
         git config user.name github-actions
         git config user.email github-actions@github.com

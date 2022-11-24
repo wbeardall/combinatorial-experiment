@@ -16,5 +16,5 @@ def test_run_experiment():
     records = CombinatorialExperiment.run_experiment(experiment_function,argv=argv)
     var = variables.deserialize_experiment_config(os.path.join(Path(__file__).parent.absolute(),'configs','experiment_config.yml'))
     assert len(records)==len(var)
-    for el in records['run_ok']:
+    for el in records['METRIC_run_ok']:
         assert el

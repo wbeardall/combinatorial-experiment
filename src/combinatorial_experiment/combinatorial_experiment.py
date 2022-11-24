@@ -369,7 +369,7 @@ class CombinatorialExperiment(object):
                 # Ensure we aren't saving metrics from a partial run
                 metrics = {}
 
-            records.update({k if k.beginswith("METRIC_") or k.beginswith("ENG_")
+            records.update({k if k.startswith("METRIC_") or k.startswith("ENG_")
                 else f"METRIC_{k}":v for k,v in metrics.items()})
             records.update({"ENG_walltime":outer_walltime})
 

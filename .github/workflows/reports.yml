@@ -28,7 +28,7 @@ jobs:
         pip install -e .
     - name: Generate and push reports
       run: |
-        rm -r .reports # Clean report directory
+        rm -rf .reports # Clean report directory
         pytest --junitxml=.reports/tests/tests.xml --html=.reports/tests/report.html \
             --cov-report xml:.reports/coverage/coverage.xml  \
             --cov-report html:.reports/coverage/report # Other options are handled by pyproject.toml

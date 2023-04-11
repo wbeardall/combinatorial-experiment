@@ -430,7 +430,7 @@ class CombinatorialExperiment(object):
             if self._records is None:
                 self._records = pd.DataFrame(data=records, index=[0])
             else:
-                self._records = self._records.append(records, ignore_index=True)
+                self._records = pd.concat([self._records,pd.DataFrame(data=records, index=[0])], ignore_index=True)
             self.save_results(True)
 
     def save_results(self, intermediate=False):

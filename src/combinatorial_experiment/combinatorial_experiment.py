@@ -33,9 +33,12 @@ allowed_time_symbols = ["T", "t", "Time", "time"]
 
 def multiprocess_wrap(func):
     def wrapper(q, config):
-        out = func(config)
-        # For safety, serialize the output
-        q.put(json.dumps(out))
+        try:
+            out = func(config)
+            # For safety, serialize the output
+            q.put(json.dumps(out))
+        except Exception as e:
+            q.put(json.dumps({"error":str(e)}))
 
     return wrapper
 
@@ -64,6 +67,7 @@ class CombinatorialExperiment(object):
         resume=True,
         base_config={},
         additional_config={},
+        job_timeout=None,
         autoname=False,
         heirarchical_dirs=False,
         repeats=1,
@@ -96,6 +100,7 @@ class CombinatorialExperiment(object):
         base_config.update(additional_config)
         self.base_config = NestedDict(base_config)
         self.autoname = autoname
+        self.job_timeout = job_timeout
         self.heirarchical_dirs = heirarchical_dirs
         self.repeats = repeats
         self.set_directories(experiment_dir, resume)
@@ -122,6 +127,7 @@ class CombinatorialExperiment(object):
             experiment_dir=args.output,
             base_config=args.base_config,
             additional_config={el: d[el] for el in add_cmd_args},
+            job_timeout=args.job_timeout,
             autoname=args.autoname,
             heirarchical_dirs=args.heirarchical_dirs,
             repeats=args.repeats,
@@ -136,6 +142,7 @@ class CombinatorialExperiment(object):
         experiment_dir=os.getcwd(),
         base_config={},
         additional_config={},
+        job_timeout=None,
         autoname=False,
         heirarchical_dirs=False,
         repeats=1,
@@ -147,6 +154,7 @@ class CombinatorialExperiment(object):
             experiment_dir,
             base_config=base_config,
             additional_config=additional_config,
+            job_timeout=job_timeout,
             autoname=autoname,
             heirarchical_dirs=heirarchical_dirs,
             repeats=repeats,
@@ -159,6 +167,7 @@ class CombinatorialExperiment(object):
         parser.add_argument("--experiment_config")
         parser.add_argument("--output", default=None)
         parser.add_argument("--repeats", type=int, default=1)
+        parser.add_argument("--job_timeout", type=int, default=None)
         parser.add_argument("--autoname", action="store_true")
         parser.add_argument("--heirarchical_dirs", action="store_true")
         return parser
@@ -198,8 +207,8 @@ class CombinatorialExperiment(object):
 
     def set_directories(self, experiment_dir, resume):
         experiment_dir = os.path.abspath(experiment_dir)
-        tail, head = os.path.split(experiment_dir)
         if self.autoname:
+            tail, head = os.path.split(experiment_dir)
             experiment_dir = os.path.join(
                 tail, head + "_" + "_".join(self._variables.flattened_name)
             )
@@ -384,9 +393,12 @@ class CombinatorialExperiment(object):
                 # kwargs from signature as reqd.
                 outer_start = time.time()
                 p.start()
+
                 # Deserialize from json for extra safety.
-                output = json.loads(q.get())
+                output = json.loads(q.get(timeout=self.job_timeout))
                 p.join()
+                if "error" in output:
+                    raise RuntimeError(f"Child process encountered error: {output['error']}")
                 outer_walltime = time.time() - outer_start
 
                 gc.collect()
@@ -397,6 +409,7 @@ class CombinatorialExperiment(object):
                     metrics = output
 
             except Exception as e:
+                outer_walltime = time.time() - outer_start
                 self.logger.exception(
                     "Fatal error in experiment #{} ({}):\n{}".format(i, savedir, e)
                 )

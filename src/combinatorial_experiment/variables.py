@@ -1,3 +1,4 @@
+import copy
 import itertools
 from collections.abc import Iterable
 
@@ -45,7 +46,7 @@ class Parameter(object):
 
     @property
     def dict(self):
-        d = self._dict
+        d = copy.deepcopy(self._dict)
         d.update({self.key: self.value})
         return d
 

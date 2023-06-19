@@ -24,6 +24,7 @@ import pandas as pd
 import yaml
 from tqdm import tqdm
 
+from .safe_unpickle import safe_load
 from .utils import NestedDict, get_last, get_matching, safe_save
 from .variables import Parameter, deserialize_experiment_config
 
@@ -473,12 +474,14 @@ class CombinatorialExperiment(object):
             print("Cache file not found.")
 
     def serialize(self, filename):
+        self_copy = copy.deepcopy(self)
+        _ = self_copy.__dict__.pop("experiment_function")
         with open(filename, "wb") as f:
-            pickle.dump(self, f)
+            pickle.dump(self_copy, f)
 
     def deserialize(self, filename):
         with open(filename, "rb") as f:
-            self.__dict__.update(pickle.load(f).__dict__)
+            self.__dict__.update(safe_load(f).__dict__)
         fn_path, fn_file = os.path.split(self._function_source)
         sys.path.append(fn_path)
         module = importlib.__import__(os.path.splitext(fn_file)[0])

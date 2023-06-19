@@ -243,7 +243,7 @@ function filterTable(elem) { // eslint-disable-line no-unused-vars
 }
 </script>
     <h1>report.html</h1>
-    <p>Report generated on 24-Nov-2022 at 14:48:52 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v3.1.1</p>
+    <p>Report generated on 11-Apr-2023 at 10:54:05 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v3.1.1</p>
     <h2>Environment</h2>
     <table id="environment">
       <tr>
@@ -254,19 +254,19 @@ function filterTable(elem) { // eslint-disable-line no-unused-vars
         <td>/usr/lib/jvm/temurin-11-jdk-amd64</td></tr>
       <tr>
         <td>Packages</td>
-        <td>{"pluggy": "1.0.0", "pytest": "7.2.0"}</td></tr>
+        <td>{"pluggy": "1.0.0", "pytest": "7.3.0"}</td></tr>
       <tr>
         <td>Platform</td>
-        <td>Linux-5.15.0-1023-azure-x86_64-with-glibc2.34</td></tr>
+        <td>Linux-5.15.0-1035-azure-x86_64-with-glibc2.34</td></tr>
       <tr>
         <td>Plugins</td>
         <td>{"cov": "2.12.1", "html": "3.1.1", "metadata": "2.0.4"}</td></tr>
       <tr>
         <td>Python</td>
-        <td>3.8.14</td></tr></table>
+        <td>3.8.16</td></tr></table>
     <h2>Summary</h2>
-    <p>12 tests ran in 4.16 seconds. </p>
-    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="passed">12 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="failed">0 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
+    <p>13 tests ran in 7.88 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="passed">13 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="failed">0 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
     <h2>Results</h2>
     <table id="results-table">
       <thead id="results-table-head">
@@ -281,7 +281,7 @@ function filterTable(elem) { // eslint-disable-line no-unused-vars
         <tr>
           <td class="col-result">Passed</td>
           <td class="col-name">test/test_experiment.py::test_run_experiment</td>
-          <td class="col-duration">3.32</td>
+          <td class="col-duration">3.63</td>
           <td class="col-links"></td></tr>
         <tr>
           <td class="extra" colspan="4">
@@ -290,8 +290,46 @@ function filterTable(elem) { // eslint-disable-line no-unused-vars
 Starting new experiment in /tmp/_comb_exp_output
 
 
-<br/> ------------------------------Captured stderr call------------------------------ <br/>  0%|          | 0/4 [00:00&lt;?, ?it/s] 25%|██▌       | 1/4 [00:00&lt;00:02,  1.05it/s] 50%|█████     | 2/4 [00:01&lt;00:01,  1.19it/s] 75%|███████▌  | 3/4 [00:02&lt;00:00,  1.23it/s]100%|██████████| 4/4 [00:03&lt;00:00,  1.26it/s]100%|██████████| 4/4 [00:03&lt;00:00,  1.23it/s]
+<br/> ------------------------------Captured stderr call------------------------------ <br/>  0%|          | 0/4 [00:00&lt;?, ?it/s] 25%|██▌       | 1/4 [00:01&lt;00:03,  1.05s/it] 50%|█████     | 2/4 [00:01&lt;00:01,  1.07it/s] 75%|███████▌  | 3/4 [00:02&lt;00:00,  1.12it/s]100%|██████████| 4/4 [00:03&lt;00:00,  1.15it/s]100%|██████████| 4/4 [00:03&lt;00:00,  1.12it/s]
 <br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test/test_experiment.py::test_fail_experiment</td>
+          <td class="col-duration">3.24</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>
+
+Starting new experiment in /tmp/_comb_exp_output_1
+
+
+<br/> ------------------------------Captured stderr call------------------------------ <br/>  0%|          | 0/4 [00:00&lt;?, ?it/s] 25%|██▌       | 1/4 [00:00&lt;00:02,  1.24it/s] 50%|█████     | 2/4 [00:01&lt;00:01,  1.24it/s] 75%|███████▌  | 3/4 [00:02&lt;00:00,  1.25it/s]100%|██████████| 4/4 [00:03&lt;00:00,  1.24it/s]100%|██████████| 4/4 [00:03&lt;00:00,  1.24it/s]
+<br/> -------------------------------Captured log call-------------------------------- <br/>ERROR    &lt;class &#x27;combinatorial_experiment.combinatorial_experiment.CombinatorialExperiment&#x27;&gt;:combinatorial_experiment.py:413 Fatal error in experiment #0 (/tmp/_comb_exp_output_1/experiments/csmvsgpioxskiqi):
+Child process encountered error: This is a dummy experimental failure.
+Traceback (most recent call last):
+  File &quot;/home/runner/work/combinatorial-experiment/combinatorial-experiment/src/combinatorial_experiment/combinatorial_experiment.py&quot;, line 401, in run_iteration
+    raise RuntimeError(f&quot;Child process encountered error: {output[&#x27;error&#x27;]}&quot;)
+RuntimeError: Child process encountered error: This is a dummy experimental failure.
+ERROR    &lt;class &#x27;combinatorial_experiment.combinatorial_experiment.CombinatorialExperiment&#x27;&gt;:combinatorial_experiment.py:413 Fatal error in experiment #1 (/tmp/_comb_exp_output_1/experiments/gslmkiaumukkgiv):
+Child process encountered error: This is a dummy experimental failure.
+Traceback (most recent call last):
+  File &quot;/home/runner/work/combinatorial-experiment/combinatorial-experiment/src/combinatorial_experiment/combinatorial_experiment.py&quot;, line 401, in run_iteration
+    raise RuntimeError(f&quot;Child process encountered error: {output[&#x27;error&#x27;]}&quot;)
+RuntimeError: Child process encountered error: This is a dummy experimental failure.
+ERROR    &lt;class &#x27;combinatorial_experiment.combinatorial_experiment.CombinatorialExperiment&#x27;&gt;:combinatorial_experiment.py:413 Fatal error in experiment #2 (/tmp/_comb_exp_output_1/experiments/dvdofipowrvzxcw):
+Child process encountered error: This is a dummy experimental failure.
+Traceback (most recent call last):
+  File &quot;/home/runner/work/combinatorial-experiment/combinatorial-experiment/src/combinatorial_experiment/combinatorial_experiment.py&quot;, line 401, in run_iteration
+    raise RuntimeError(f&quot;Child process encountered error: {output[&#x27;error&#x27;]}&quot;)
+RuntimeError: Child process encountered error: This is a dummy experimental failure.
+ERROR    &lt;class &#x27;combinatorial_experiment.combinatorial_experiment.CombinatorialExperiment&#x27;&gt;:combinatorial_experiment.py:413 Fatal error in experiment #3 (/tmp/_comb_exp_output_1/experiments/uxeujvtiktfvvmo):
+Child process encountered error: This is a dummy experimental failure.
+Traceback (most recent call last):
+  File &quot;/home/runner/work/combinatorial-experiment/combinatorial-experiment/src/combinatorial_experiment/combinatorial_experiment.py&quot;, line 401, in run_iteration
+    raise RuntimeError(f&quot;Child process encountered error: {output[&#x27;error&#x27;]}&quot;)
+RuntimeError: Child process encountered error: This is a dummy experimental failure.<br/></div></td></tr></tbody>
       <tbody class="passed results-table-row">
         <tr>
           <td class="col-result">Passed</td>

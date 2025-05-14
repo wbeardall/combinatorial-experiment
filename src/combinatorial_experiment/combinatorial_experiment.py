@@ -307,7 +307,7 @@ class CombinatorialExperiment(object):
                 )
                 try:
                     os.remove(prev_cache)
-                except:
+                except Exception as e:
                     pass
         self.save_results(False)
         self.mark_run_complete()
@@ -415,6 +415,9 @@ class CombinatorialExperiment(object):
                     "Fatal error in experiment #{} ({}):\n{}".format(i, savedir, e)
                 )
                 warnings.warn(str(e))
+                if (i == 0):
+                    # If the first run fails, we want to raise the error so we can debug
+                    raise e
                 # Ensure we aren't saving metrics from a partial run
                 metrics = {}
 

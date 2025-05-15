@@ -1,4 +1,5 @@
 import argparse
+import atexit
 import copy
 import datetime
 import gc
@@ -11,6 +12,7 @@ import re
 import string
 import sys
 import time
+import shutil
 from typing import Callable
 import warnings
 
@@ -23,6 +25,7 @@ import numpy as np
 import pandas as pd
 import yaml
 from tqdm import tqdm
+from functools import partial
 
 from .safe_unpickle import safe_load
 from .utils import NestedDict, get_last, get_matching, safe_save
@@ -32,10 +35,10 @@ use_style = tuple(int(el) for el in pd.__version__.split(".")) > (1, 3, 0)
 allowed_time_symbols = ["T", "t", "Time", "time"]
 
 
-def multiprocess_wrap(func, serialize: bool = True):
+def multiprocess_wrap(func, serialize: bool = True, dry_run: bool = False):
     def wrapper(q, config):
         try:
-            out = func(config)
+            out = func(config, dry_run=dry_run)
             if serialize:
                 # For safety, serialize the output
                 out = pickle.dumps(out)
@@ -79,6 +82,7 @@ class CombinatorialExperiment(object):
         repeats: int = 1,
         serialize: bool = False,
         run_in_band: bool = False,
+        dry_run: bool = False,
     ):
         # NOTE: cache is deprecated.
         if experiment_function is None or variables is None:
@@ -89,9 +93,9 @@ class CombinatorialExperiment(object):
             )
             self._experiment_fn_name = experiment_function.__name__
             if run_in_band:
-                self.experiment_function = experiment_function
+                self.experiment_function = partial(experiment_function, dry_run=dry_run)
             else:
-                self.experiment_function = multiprocess_wrap(experiment_function, serialize=serialize)
+                self.experiment_function = multiprocess_wrap(experiment_function, serialize=serialize, dry_run=dry_run)
         else:
             self._experiment_source = None
             self._experiment_fn_name = None
@@ -103,6 +107,7 @@ class CombinatorialExperiment(object):
                             "use CombinatorialExperiment.from_config()?")"""
         self._serialize = serialize
         self._run_in_band = run_in_band
+        self._dry_run = dry_run
         self._variables = variables
         self._records = None
         self._resume = resume
@@ -150,15 +155,18 @@ class CombinatorialExperiment(object):
     @classmethod
     def from_config(
         cls,
-        experiment_function,
-        experiment_config,
-        experiment_dir=os.getcwd(),
-        base_config={},
-        additional_config={},
-        job_timeout=None,
-        autoname=False,
-        heirarchical_dirs=False,
-        repeats=1,
+        experiment_function: Callable,
+        experiment_config: str,
+        experiment_dir: str = os.getcwd(),
+        base_config: dict = {},
+        additional_config: dict = {},
+        job_timeout: int = None,
+        autoname: bool = False,
+        heirarchical_dirs: bool = False,
+        repeats: int = 1,
+        dry_run: bool = False,
+        run_in_band: bool = False,
+        serialize: bool = False,
     ):
         variables = deserialize_experiment_config(experiment_config)
         return cls(
@@ -171,6 +179,9 @@ class CombinatorialExperiment(object):
             autoname=autoname,
             heirarchical_dirs=heirarchical_dirs,
             repeats=repeats,
+            dry_run=dry_run,
+            run_in_band=run_in_band,
+            serialize=serialize,
         )
 
     @classmethod
@@ -265,6 +276,8 @@ class CombinatorialExperiment(object):
             experiment_dir = safe_save(experiment_dir, zero_ext=False, ignore_ext=True)
             self._experiment_dir = experiment_dir
             print("\n\nStarting new experiment in {}\n\n".format(experiment_dir))
+        if self._dry_run:
+            atexit.register(partial(shutil.rmtree, self._experiment_dir))
 
     def setup(self):
         if not os.path.exists(self._cache_dir):

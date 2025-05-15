@@ -222,7 +222,7 @@ class ProductVariable(VariableCollection):
     def __len__(self):
         lengths = [len(var) for var in self._variables]
         return (
-            np.product(lengths)
+            np.prod(lengths)
             if not self._experiments
             else min(np.product(lengths), self._experiments)
         )

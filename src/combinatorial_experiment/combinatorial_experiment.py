@@ -4,7 +4,6 @@ import datetime
 import gc
 import importlib
 import inspect
-import json
 import logging
 import os
 import random
@@ -12,6 +11,7 @@ import re
 import string
 import sys
 import time
+from typing import Callable
 import warnings
 
 import dill as pickle
@@ -26,20 +26,25 @@ from tqdm import tqdm
 
 from .safe_unpickle import safe_load
 from .utils import NestedDict, get_last, get_matching, safe_save
-from .variables import Parameter, deserialize_experiment_config
+from .variables import Parameter, VariableCollection, deserialize_experiment_config
 
 use_style = tuple(int(el) for el in pd.__version__.split(".")) > (1, 3, 0)
 allowed_time_symbols = ["T", "t", "Time", "time"]
 
 
-def multiprocess_wrap(func):
+def multiprocess_wrap(func, serialize: bool = True):
     def wrapper(q, config):
         try:
             out = func(config)
-            # For safety, serialize the output
-            q.put(json.dumps(out))
+            if serialize:
+                # For safety, serialize the output
+                out = pickle.dumps(out)
+            q.put(out)
         except Exception as e:
-            q.put(json.dumps({"error":str(e)}))
+            out = {"error":e}
+            if serialize:
+                out = pickle.dumps(out)
+            q.put(out)
 
     return wrapper
 
@@ -62,16 +67,18 @@ class CombinatorialExperiment(object):
 
     def __init__(
         self,
-        experiment_function=None,
-        variables=None,
-        experiment_dir=os.getcwd(),
-        resume=True,
-        base_config={},
-        additional_config={},
-        job_timeout=None,
-        autoname=False,
-        heirarchical_dirs=False,
-        repeats=1,
+        experiment_function: Callable = None,
+        variables: VariableCollection = None,
+        experiment_dir: str = os.getcwd(),
+        resume: bool = True,
+        base_config: dict = {},
+        additional_config: dict = {},
+        job_timeout: int = None,
+        autoname: bool = False,
+        heirarchical_dirs: bool = False,
+        repeats: int = 1,
+        serialize: bool = False,
+        run_in_band: bool = False,
     ):
         # NOTE: cache is deprecated.
         if experiment_function is None or variables is None:
@@ -81,7 +88,10 @@ class CombinatorialExperiment(object):
                 inspect.getfile(experiment_function)
             )
             self._experiment_fn_name = experiment_function.__name__
-            self.experiment_function = multiprocess_wrap(experiment_function)
+            if run_in_band:
+                self.experiment_function = experiment_function
+            else:
+                self.experiment_function = multiprocess_wrap(experiment_function, serialize=serialize)
         else:
             self._experiment_source = None
             self._experiment_fn_name = None
@@ -91,6 +101,8 @@ class CombinatorialExperiment(object):
             raise TypeError("Variables must be experiment.Variable or "
                             "experiment.VariableCollection. Did you mean to "
                             "use CombinatorialExperiment.from_config()?")"""
+        self._serialize = serialize
+        self._run_in_band = run_in_band
         self._variables = variables
         self._records = None
         self._resume = resume
@@ -171,6 +183,8 @@ class CombinatorialExperiment(object):
         parser.add_argument("--job_timeout", type=int, default=None)
         parser.add_argument("--autoname", action="store_true")
         parser.add_argument("--heirarchical_dirs", action="store_true")
+        parser.add_argument("--serialize", action="store_true")
+        parser.add_argument("--run_in_band", action="store_true")
         return parser
 
     @classmethod
@@ -314,7 +328,6 @@ class CombinatorialExperiment(object):
         return self.records
 
     def run_iteration(self, parameters, i, run_length):
-
         if isinstance(parameters, Parameter):
             parameters = [parameters]
         for j in range(self.repeats):
@@ -387,19 +400,25 @@ class CombinatorialExperiment(object):
             config.update({"savedir": savedir})
 
             try:
-                q = mp.Queue()
-
-                p = mp.Process(target=self.experiment_function, args=(q, config))
                 # TODO: Consider making this more flexible, i.e. constructing
                 # kwargs from signature as reqd.
                 outer_start = time.time()
-                p.start()
+                if self._run_in_band:
+                    output = self.experiment_function(config)
+                else:
+                    q = mp.Queue()
 
-                # Deserialize from json for extra safety.
-                output = json.loads(q.get(timeout=self.job_timeout))
-                p.join()
+                    p = mp.Process(target=self.experiment_function, args=(q, config))
+
+                    p.start()
+
+                    # Deserialize
+                    output = q.get(timeout=self.job_timeout)
+                    if self._serialize:
+                        output = pickle.loads(output)
+                    p.join()
                 if "error" in output:
-                    raise RuntimeError(f"Child process encountered error: {output['error']}")
+                    raise RuntimeError("Child process encountered error") from output["error"]
                 outer_walltime = time.time() - outer_start
 
                 gc.collect()
@@ -489,5 +508,8 @@ class CombinatorialExperiment(object):
         sys.path.append(fn_path)
         module = importlib.__import__(os.path.splitext(fn_file)[0])
         experiment_function = getattr(module, self._experiment_fn_name)
-        self.experiment_function = multiprocess_wrap(experiment_function)
+        if self._run_in_band:
+            self.experiment_function = experiment_function
+        else:
+            self.experiment_function = multiprocess_wrap(experiment_function, serialize=self._serialize)
         print("Test object loaded from file: {}".format(filename))

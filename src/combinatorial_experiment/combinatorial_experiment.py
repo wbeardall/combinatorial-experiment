@@ -239,7 +239,7 @@ class CombinatorialExperiment(object):
             os.makedirs(database_dir)
         
         self._conn = sqlite3.connect(self._database_path)
-        self._experiment_set = ExperimentSet(conn=self._conn, table_name=self.name)
+        self._experiment_set = ExperimentSet(conn=self._conn, table_name=self.name, logger=self.logger)
 
         atexit.register(self._conn.close)
         

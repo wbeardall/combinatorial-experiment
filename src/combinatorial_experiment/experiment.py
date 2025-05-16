@@ -11,7 +11,6 @@ from .utils import NestedDict, escape_identifier
 
 logger = logging.getLogger(__name__)
 
-
 class ExperimentStatus(Enum):
     PENDING = "pending"
     RUNNING = "running"
@@ -183,13 +182,15 @@ class ExperimentSet:
     conn: Connection
     table_name: str
     experiments: Dict[str, Experiment]
+    logger: logging.Logger
 
-    def __init__(self, *, conn: Connection, table_name: str, experiments: Union[List[Experiment], None] = None):
+    def __init__(self, *, conn: Connection, table_name: str, experiments: Union[List[Experiment], None] = None, logger: logging.Logger = logger):
         self.conn = conn
         self.conn.row_factory = sqlite3.Row
         self.table_name = table_name
         self.experiments = {}
         self.ensure_table(conn, table_name)
+        self.logger = logger
         if experiments is not None:
             for experiment in experiments:
                 self.experiments[experiment.id] = experiment
@@ -231,7 +232,7 @@ class ExperimentSet:
             deserialized.bind(self)
             self.experiments[deserialized.id] = deserialized
             count += 1
-        logger.info(f"Pulled {count} experiments from '{self.table_name}'")
+        self.logger.info(f"Pulled {count} experiments from '{self.table_name}'")
         
     def push(self, experiments: List[Experiment]) -> None:
         self.conn.executemany(upsert_query(self.table_name), [experiment.as_dict() for experiment in experiments])
@@ -242,7 +243,7 @@ class ExperimentSet:
 
     def update_experiments(self, configs: List[Dict[str, Any]], repeats: int = 1) -> int:
         new_experiments = []
-        logger.info(f"Updating experiments with {len(configs)} configs and {repeats} repeats")
+        self.logger.info(f"Updating experiments with {len(configs)} configs and {repeats} repeats")
         for config in configs:
             matching = sum(1 for experiment in self.experiments.values() if experiment.config == config)
             for _ in range(repeats - matching):
@@ -250,7 +251,7 @@ class ExperimentSet:
                 experiment.bind(self)
                 self.experiments[experiment.id] = experiment
                 new_experiments.append(experiment)
-        logger.info(f"Pushing {len(new_experiments)} new experiments")
+        self.logger.info(f"Pushing {len(new_experiments)} new experiments")
         self.push(new_experiments)
         return len(new_experiments)
 

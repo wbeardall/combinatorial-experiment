@@ -4,7 +4,7 @@ import json
 import logging
 import sqlite3
 from sqlite3 import Connection
-from typing import Dict, Any, List, Set, Tuple, Union
+from typing import Dict, Any, List, Tuple, Union
 from uuid import uuid4
 
 from .utils import NestedDict, escape_identifier

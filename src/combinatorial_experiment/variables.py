@@ -1,7 +1,7 @@
 import copy
 import itertools
 from collections.abc import Iterable
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List
 
 import numpy as np
 import six
@@ -21,7 +21,7 @@ class Parameter(object):
 
     def __str__(self):
         if self._record:
-            if self._record == True:
+            if self._record == True:  # noqa: E712
                 val = self._value
             else:
                 val = self._record

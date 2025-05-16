@@ -1,6 +1,7 @@
 import copy
 import itertools
 from collections.abc import Iterable
+from typing import Any, Dict, List, Set
 
 import numpy as np
 import six
@@ -183,6 +184,16 @@ class VariableCollection(object):
         for v in self._variables:
             vs.update(v.serialize())
         return {type(self).__name__: vs}
+    
+    def to_configs(self, base_config: Dict[str, Any]) -> List[Dict[str, Any]]:
+        configs = []
+        for parameters in self:
+            config = copy.deepcopy(base_config)
+            for p in parameters:
+                config.update(p.dict)
+            configs.append(config)
+        return configs
+
 
 
 class ZippedVariable(VariableCollection):
@@ -224,7 +235,7 @@ class ProductVariable(VariableCollection):
         return (
             np.prod(lengths)
             if not self._experiments
-            else min(np.product(lengths), self._experiments)
+            else min(np.prod(lengths), self._experiments)
         )
 
     def serialize(self):

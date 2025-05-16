@@ -28,7 +28,7 @@ def directory():
     file_dir = os.path.join(Path(__file__).parent.absolute(), "__files__")
     if not os.path.exists(file_dir):
         os.makedirs(file_dir)
-    Path(os.path.join(file_dir, f"file.dum")).touch()
+    Path(os.path.join(file_dir, "file.dum")).touch()
     for i in range(3):
         Path(os.path.join(file_dir, f"file_{i}.dum")).touch()
     yield file_dir
@@ -45,7 +45,7 @@ def test_get_last(directory):
 def test_get_matching(directory):
     names = utils.get_matching(os.path.join(directory, "file.dum"), zero_ext=True)
     assert len(names) == 3
-    name = utils.get_matching(os.path.join(directory, "file.dum"), zero_ext=False)
+    names = utils.get_matching(os.path.join(directory, "file.dum"), zero_ext=False)
     assert len(names) == 3
 
 

@@ -172,3 +172,7 @@ class SizeUnknownError(Exception):
 
     def __repr__(self):
         return repr(self.value)
+
+
+def escape_identifier(s: str) -> str:
+    return '"' + s.replace('"', '""') + '"'

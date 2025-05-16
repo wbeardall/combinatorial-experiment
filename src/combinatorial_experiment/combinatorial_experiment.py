@@ -7,12 +7,10 @@ import importlib
 import inspect
 import logging
 import os
-import random
-import re
-import string
 import sys
 import time
 import shutil
+import sqlite3
 from typing import Callable
 import warnings
 
@@ -21,15 +19,16 @@ import dill as pickle
 # NOTE: This is NOT the standard multiprocessing library, which uses pickle;
 # it's the one from Pathos, which uses Dill
 import multiprocess as mp
-import numpy as np
 import pandas as pd
 import yaml
 from tqdm import tqdm
-from functools import partial
+from functools import cached_property, partial
+
+from combinatorial_experiment.experiment import Experiment, ExperimentSet, ExperimentStatus
 
 from .safe_unpickle import safe_load
-from .utils import NestedDict, get_last, get_matching, safe_save
-from .variables import Parameter, VariableCollection, deserialize_experiment_config
+from .utils import NestedDict, get_last, safe_save
+from .variables import VariableCollection, deserialize_experiment_config
 
 use_style = tuple(int(el) for el in pd.__version__.split(".")) > (1, 3, 0)
 allowed_time_symbols = ["T", "t", "Time", "time"]
@@ -63,30 +62,39 @@ class CombinatorialExperiment(object):
     that it is not secure. Never run a .tst object from an untrustworthy source,
     as the experiment_function can contain arbitrary (and possibly malicious) code.
 
+    Args:
+        experiment_function: The function to run.
+        variables: The variables to run.
+        database_path: The path to the database. Defaults to `experiment.db` in the experiment directory.
+        experiment_dir: The directory to run the experiment in.
+        resume: Whether to resume the experiment.
+        base_config: The base config.
+        additional_config: The additional config.
     """
-
-    _cache_base = "test_iter"
-    _cache_ext = ".tst"
+    initialized = False
+    _conn = None
 
     def __init__(
         self,
         experiment_function: Callable = None,
         variables: VariableCollection = None,
+        database_path: str = None,
         experiment_dir: str = os.getcwd(),
         resume: bool = True,
         base_config: dict = {},
         additional_config: dict = {},
         job_timeout: int = None,
         autoname: bool = False,
-        heirarchical_dirs: bool = False,
         repeats: int = 1,
         serialize: bool = False,
         run_in_band: bool = False,
         dry_run: bool = False,
+        throw_on_failure: bool = False,
     ):
+        self.initialized = False
         # NOTE: cache is deprecated.
         if experiment_function is None or variables is None:
-            assert resume == True
+            assert resume, 'Cannot resume experiment with no experiment function or variables'
         if experiment_function is not None:
             self._function_source = os.path.abspath(
                 inspect.getfile(experiment_function)
@@ -109,9 +117,9 @@ class CombinatorialExperiment(object):
         self._run_in_band = run_in_band
         self._dry_run = dry_run
         self._variables = variables
-        self._records = None
         self._resume = resume
-        self._cache_iter = 0
+        self._database_path = database_path
+        self._throw_on_failure = throw_on_failure
         if isinstance(base_config, str):
             with open(base_config, "r") as f:
                 base_config = yaml.safe_load(f)
@@ -119,13 +127,17 @@ class CombinatorialExperiment(object):
         self.base_config = NestedDict(base_config)
         self.autoname = autoname
         self.job_timeout = job_timeout
-        self.heirarchical_dirs = heirarchical_dirs
         self.repeats = repeats
-        self.set_directories(experiment_dir, resume)
         try:
             mp.set_start_method("spawn")
         except RuntimeError:
             pass
+
+        self.set_directories(experiment_dir, resume)
+
+    @property
+    def cache(self):
+        return os.path.join(self._experiment_dir, ".cache")
 
     @classmethod
     def run_experiment(cls, experiment_function, add_cmd_args=[], argv=None):
@@ -140,15 +152,19 @@ class CombinatorialExperiment(object):
 
         d = vars(args)
         experiment = cls.from_config(
-            experiment_function,
-            args.experiment_config,
+            experiment_function=experiment_function,
+            experiment_config=args.experiment_config,
             experiment_dir=args.output,
+            database_path=args.database_path,
             base_config=args.base_config,
             additional_config={el: d[el] for el in add_cmd_args},
             job_timeout=args.job_timeout,
             autoname=args.autoname,
-            heirarchical_dirs=args.heirarchical_dirs,
             repeats=args.repeats,
+            dry_run=args.dry_run,
+            run_in_band=args.run_in_band,
+            serialize=args.serialize,
+            throw_on_failure=args.throw_on_failure,
         )
         return experiment.run()
 
@@ -162,26 +178,28 @@ class CombinatorialExperiment(object):
         additional_config: dict = {},
         job_timeout: int = None,
         autoname: bool = False,
-        heirarchical_dirs: bool = False,
+        database_path: str = None,
         repeats: int = 1,
         dry_run: bool = False,
         run_in_band: bool = False,
         serialize: bool = False,
+        throw_on_failure: bool = False,
     ):
         variables = deserialize_experiment_config(experiment_config)
         return cls(
-            experiment_function,
-            variables,
-            experiment_dir,
+            experiment_function=experiment_function,
+            variables=variables,
+            experiment_dir=experiment_dir,
+            database_path=database_path,
             base_config=base_config,
             additional_config=additional_config,
             job_timeout=job_timeout,
             autoname=autoname,
-            heirarchical_dirs=heirarchical_dirs,
             repeats=repeats,
             dry_run=dry_run,
             run_in_band=run_in_band,
             serialize=serialize,
+            throw_on_failure=throw_on_failure,
         )
 
     @classmethod
@@ -193,9 +211,11 @@ class CombinatorialExperiment(object):
         parser.add_argument("--repeats", type=int, default=1)
         parser.add_argument("--job_timeout", type=int, default=None)
         parser.add_argument("--autoname", action="store_true")
-        parser.add_argument("--heirarchical_dirs", action="store_true")
         parser.add_argument("--serialize", action="store_true")
         parser.add_argument("--run_in_band", action="store_true")
+        parser.add_argument("--database_path", default=None)
+        parser.add_argument("--dry_run", action="store_true")
+        parser.add_argument("--throw_on_failure", action="store_true")
         return parser
 
     @classmethod
@@ -206,6 +226,27 @@ class CombinatorialExperiment(object):
         )
         experiment.run()
 
+    def initialize(self):
+        if self.initialized:
+            return
+        
+        if self._database_path is None:
+            self._database_path = os.path.join(self._experiment_dir, "experiment.db")
+
+        database_dir = os.path.dirname(self._database_path)
+
+        if not os.path.exists(database_dir):
+            os.makedirs(database_dir)
+        
+        self._conn = sqlite3.connect(self._database_path)
+        self._experiment_set = ExperimentSet(conn=self._conn, table_name=self.name)
+
+        atexit.register(self._conn.close)
+        
+        configs = self._variables.to_configs(self.base_config)
+        self._experiment_set.update_experiments(configs, repeats=self.repeats)
+
+
     def add_variable(self, variable):
         self._variables.update(variable)
 
@@ -215,8 +256,11 @@ class CombinatorialExperiment(object):
         return os.path.exists(os.path.join(directory, ".run_complete"))
 
     def mark_run_complete(self):
-        with open(os.path.join(self._experiment_dir, ".run_complete"), "w") as f:
-            f.write(str(datetime.datetime.now()))
+        if self._experiment_set.complete:
+            with open(os.path.join(self._experiment_dir, ".run_complete"), "w") as f:
+                f.write(str(datetime.datetime.now()))
+        else:
+            warnings.warn("Experiment set is not complete. Not marking run complete.")
 
     def make_gitignore(self):
         gitignore = ["cache", "experiments", "input"]
@@ -254,11 +298,11 @@ class CombinatorialExperiment(object):
                     )
                 else:
                     self._experiment_dir = experiment_dir
-                    if os.path.exists(os.path.join(self._experiment_dir, "cache")):
+                    if os.path.exists(self.cache):
                         print(
                             "\n\nResuming experiment from {}\n\n".format(experiment_dir)
                         )
-                        self.auto_deserialize(self._cache_dir)
+                        self.deserialize()
                     # In case the experiment directory was already created (but empty)
                     else:
                         print(
@@ -279,15 +323,24 @@ class CombinatorialExperiment(object):
         if self._dry_run:
             atexit.register(partial(shutil.rmtree, self._experiment_dir))
 
+    @property
+    def name(self):
+        return os.path.basename(self._experiment_dir)
+    
+
     def setup(self):
-        if not os.path.exists(self._cache_dir):
-            os.makedirs(self._cache_dir)
+        self.initialize()
+        self.serialize()
         self.make_gitignore()
+
+
+    @cached_property
+    def logger(self):
         # Set logging to experiment directory
         # Get logger for CombinatorialExperiment
-        self.logger = logging.getLogger(str(self.__class__))
+        logger = logging.getLogger(str(self.__class__))
         # set the log level to INFO, DEBUG as the default is ERROR
-        self.logger.setLevel(logging.INFO)
+        logger.setLevel(logging.INFO)
         filehandler = logging.FileHandler(
             os.path.join(self._experiment_dir, "logfile.log"), "a"
         )
@@ -295,186 +348,108 @@ class CombinatorialExperiment(object):
             "%(asctime)-15s::%(levelname)s::%(filename)s::%(funcName)s::%(lineno)d::%(message)s"
         )
         filehandler.setFormatter(formatter)
-        for hdlr in self.logger.handlers[:]:  # remove the existing file handlers
+        for hdlr in logger.handlers[:]:  # remove the existing file handlers
             if isinstance(hdlr, logging.FileHandler):
-                self.logger.removeHandler(hdlr)
-        self.logger.addHandler(filehandler)  # set the new handler
+                logger.removeHandler(hdlr)
+        logger.addHandler(filehandler)  # set the new handler
+        return logger
 
     @property
     def _cache_dir(self):
         cache_dir = os.path.join(self._experiment_dir, "cache")
         return cache_dir
+    
+    @property
+    def _cache_loc(self):
+        cache_loc = os.path.join(self._cache_dir, f"{self._cache_base}{self._cache_ext}")
+        return cache_loc
 
-    def run(self):
+    def run(self) -> pd.DataFrame:
         self.setup()
         self.dump_configs()
-        variables = list(self._variables)
-        run_length = len(variables)
-        for i, parameters in enumerate(tqdm(variables, total=run_length)):
-            if i < self._cache_iter:
-                if i == self._cache_iter - 1:
-                    print(
-                        "\n\n Continuing from iteration {}{}.\n\n".format(
-                            i + 1, "/{}".format(run_length) if run_length else ""
-                        )
-                    )
-                continue
-            self.run_iteration(parameters, i, run_length)
+        to_run = self._experiment_set.get_incomplete()
+        run_length = len(to_run)
+        for i, experiment in enumerate(tqdm(to_run, total=run_length)):
+            self.run_iteration(experiment, i, run_length)
             if self._resume:
-                self._cache_iter = i + 1
-                cache_loc = os.path.join(
-                    self._cache_dir,
-                    "{}_{}{}".format(self._cache_base, i, self._cache_ext),
-                )
-                self.serialize(cache_loc)
-                # Remove previous cache to save space
-                prev_cache = os.path.join(
-                    self._cache_dir,
-                    "{}_{}{}".format(self._cache_base, i - 1, self._cache_ext),
-                )
-                try:
-                    os.remove(prev_cache)
-                except Exception as e:
-                    pass
+                self.serialize()
         self.save_results(False)
         self.mark_run_complete()
-        return self.records
+        return self.records()
 
-    def run_iteration(self, parameters, i, run_length):
-        if isinstance(parameters, Parameter):
-            parameters = [parameters]
-        for j in range(self.repeats):
-            config = copy.deepcopy(self.base_config)
-            for p in parameters:
-                config.update(p.dict)
-            # Get record dictionary; replace with parameter value if Boolean
-            # True, otherwise leave as-is
-            records = copy.deepcopy(self.base_config)
-            savedir = os.path.join(self._experiment_dir, "experiments")
-            variables_len_gt_one = self._variables.flattened_name
-            dir_dict = {}
-            for p in parameters:
-                records.update(p.record)
-                if p.name in variables_len_gt_one:
-                    dir_dict[p.name] = str(p)
+    def run_iteration(self, experiment: Experiment, i: int, run_length: int):
+        config = copy.deepcopy(experiment.config)
+        experiment_archive = os.path.join(self._experiment_dir, "experiments")
+        savedir = os.path.join(experiment_archive, experiment.id)
 
-            # Flatten records to dict and prepend CFG to all
-            records = {f"CFG_{k}": v for k, v in NestedDict.flatten(records).items()}
+        try:
+            os.makedirs(savedir)
+        except FileExistsError:
+            # Resuming from this directory
+            pass
 
-            if self.heirarchical_dirs:
-                if self.repeats > 1:
-                    # Repeats always at head of directory tree
-                    savedir = os.path.join(savedir, "repeat--{}".format(j))
-                # K-Fold always at tail of directory tree, External, then Internal
-                ef_key = None
-                if_key = None
-                for k in dir_dict.keys():
-                    if re.match("ext[0-9]+fold", k):
-                        ef_key = k
-                    if re.match("int[0-9]+fold", k):
-                        if_key = k
-                if ef_key:
-                    efold_dir = dir_dict.pop(ef_key)
-                else:
-                    efold_dir = None
-                if if_key:
-                    ifold_dir = dir_dict.pop(if_key)
-                else:
-                    ifold_dir = None
-                savedir = os.path.join(
-                    savedir, "/".join([dir_dict[k] for k in sorted(dir_dict)])
-                )
-                for el in [efold_dir, ifold_dir]:
-                    if el:
-                        savedir = os.path.join(savedir, el)
+        # Save config
+        with open(os.path.join(savedir, "experiment_config.yml"), "w") as f:
+            yaml.dump(config, f)
+
+        experiment.update_metadata(metadata={'relpath': os.path.relpath(savedir, self._experiment_dir)})
+        config.update({"savedir": savedir})
+
+        try:
+            # TODO: Consider making this more flexible, i.e. constructing
+            # kwargs from signature as reqd.
+            outer_start = time.time()
+            if self._run_in_band:
+                output = self.experiment_function(config)
             else:
-                while True:
-                    cand = os.path.join(
-                        savedir,
-                        "".join(
-                            random.choice(string.ascii_lowercase) for i in range(15)
-                        ),
-                    )
-                    if not os.path.exists(cand):
-                        savedir = cand
-                        break
+                q = mp.Queue()
 
-            try:
-                os.makedirs(savedir)
-            except FileExistsError:
-                # Resuming from this directory
-                pass
+                p = mp.Process(target=self.experiment_function, args=(q, config))
 
-            # Save config
-            with open(os.path.join(savedir, "experiment_config.yml"), "w") as f:
-                yaml.dump(config, f)
+                p.start()
 
-            records["CFG_relpath"] = os.path.relpath(savedir, self._experiment_dir)
-            config.update({"savedir": savedir})
+                # Deserialize
+                output = q.get(timeout=self.job_timeout)
+                if self._serialize:
+                    output = pickle.loads(output)
+                p.join()
+            if "error" in output:
+                raise RuntimeError(f"Experiment error: {output['error']}") from output["error"]
+            outer_walltime = time.time() - outer_start
 
-            try:
-                # TODO: Consider making this more flexible, i.e. constructing
-                # kwargs from signature as reqd.
-                outer_start = time.time()
-                if self._run_in_band:
-                    output = self.experiment_function(config)
-                else:
-                    q = mp.Queue()
+            gc.collect()
+            if "metrics" in output.keys():
+                metrics = output["metrics"]
+            else:
+                metrics = output
+            experiment.update(metrics=metrics, status=ExperimentStatus.COMPLETED)
 
-                    p = mp.Process(target=self.experiment_function, args=(q, config))
-
-                    p.start()
-
-                    # Deserialize
-                    output = q.get(timeout=self.job_timeout)
-                    if self._serialize:
-                        output = pickle.loads(output)
-                    p.join()
-                if "error" in output:
-                    raise RuntimeError("Child process encountered error") from output["error"]
-                outer_walltime = time.time() - outer_start
-
-                gc.collect()
-                if "metrics" in output.keys():
-                    metrics = output["metrics"]
-
-                else:
-                    metrics = output
-
-            except Exception as e:
-                outer_walltime = time.time() - outer_start
-                self.logger.exception(
-                    "Fatal error in experiment #{} ({}):\n{}".format(i, savedir, e)
-                )
-                warnings.warn(str(e))
-                if (i == 0):
-                    # If the first run fails, we want to raise the error so we can debug
-                    raise e
-                # Ensure we aren't saving metrics from a partial run
-                metrics = {}
-
-            records.update(
-                {
-                    k
-                    if k.startswith("METRIC_") or k.startswith("ENG_")
-                    else f"METRIC_{k}": v
-                    for k, v in metrics.items()
-                }
+        except Exception as e:
+            outer_walltime = time.time() - outer_start
+            self.logger.exception(
+                "Fatal error in experiment #{} ({}):\n{}".format(i, savedir, e)
             )
-            records.update({"ENG_walltime": outer_walltime})
+            warnings.warn(str(e))
+            experiment.update(status=ExperimentStatus.FAILED, error=str(e))
+            if (self._throw_on_failure):
+                raise e
+            # Ensure we aren't saving metrics from a partial run
+            metrics = {}
 
-            if self._records is None:
-                self._records = pd.DataFrame(data=records, index=[0])
-            else:
-                self._records = pd.concat([self._records,pd.DataFrame(data=records, index=[0])], ignore_index=True)
-            self.save_results(True)
+        experiment.update_metadata(metadata={'walltime': outer_walltime})
+        self.save_results(True)
+
+    def records(self) -> pd.DataFrame:
+        return pd.DataFrame([el.as_record() for el in self._experiment_set.experiments.values() if el.status == ExperimentStatus.COMPLETED])
+    
 
     def save_results(self, intermediate=False):
+        records = self.records()
         if intermediate:
             prepend = "intermediate_"
         else:
             prepend = ""
-        self._records.to_csv(
+        records.to_csv(
             os.path.join(self._experiment_dir, "{}results.csv".format(prepend))
         )
 
@@ -482,41 +457,35 @@ class CombinatorialExperiment(object):
             os.path.join(self._experiment_dir, "{}results.md".format(prepend)), "w"
         ) as f:
             if use_style:
-                f.write(self._records.style.to_latex())
+                f.write(records.style.to_latex())
             else:
-                f.write(self._records.to_latex(index=False, float_format="%0.3f"))
+                f.write(records.to_latex(index=False, float_format="%0.3f"))
 
-    @property
-    def records(self):
-        return self._records
+    def serialize(self):
+        old_loc = self.cache + ".old"
+        if (os.path.exists(self.cache)):
+            os.rename(self.cache, old_loc)
 
-    def auto_deserialize(self, directory):
-        filename = os.path.join(directory, self._cache_base + self._cache_ext)
-        try:
-            matching_files = get_matching(filename, zero_ext=True)
-            descending_idx = np.sort(list(matching_files.keys()))[::-1]
-            for idx in descending_idx:
-                file = matching_files[idx]
-                try:
-                    self.deserialize(file)
-                    break
-                except EOFError:
-                    self.logger.warn(
-                        "Cache file {} corrupted. Consider deleting.".format(file)
-                    )
-                    # os.remove(file)
-        except FileNotFoundError:
-            print("Cache file not found.")
+        unpicklable_attrs = ["experiment_function", "_conn", "_experiment_set"]
+        attrs = {k: v for k, v in self.__dict__.items() if k not in unpicklable_attrs}
 
-    def serialize(self, filename):
-        self_copy = copy.deepcopy(self)
-        _ = self_copy.__dict__.pop("experiment_function")
-        with open(filename, "wb") as f:
-            pickle.dump(self_copy, f)
+        with open(self.cache, "wb") as f:
+            pickle.dump(attrs, f)
+        if os.path.exists(old_loc):
+            os.remove(old_loc)
 
-    def deserialize(self, filename):
-        with open(filename, "rb") as f:
-            self.__dict__.update(safe_load(f).__dict__)
+    def deserialize(self):
+        old_loc = self.cache + ".old"
+        if os.path.exists(self.cache):
+            file = self.cache
+        elif os.path.exists(old_loc):
+            file = old_loc
+            warnings.warn("Cache file not found. Using old cache file.")
+        else:
+            raise FileNotFoundError("Cache file '{}' not found.".format(self.cache))
+
+        with open(file, "rb") as f:
+            self.__dict__.update(safe_load(f))
         fn_path, fn_file = os.path.split(self._function_source)
         sys.path.append(fn_path)
         module = importlib.__import__(os.path.splitext(fn_file)[0])
@@ -525,4 +494,4 @@ class CombinatorialExperiment(object):
             self.experiment_function = experiment_function
         else:
             self.experiment_function = multiprocess_wrap(experiment_function, serialize=self._serialize)
-        print("Test object loaded from file: {}".format(filename))
+        self.logger.info("Test object loaded from file: {}".format(self.cache))

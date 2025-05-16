@@ -2,22 +2,55 @@
 requires = ["setuptools>=42.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "combinatorial-experiment"
+version = "0.2.0"
+description = "Lightweight hyperparameter experimentation framework for small ML jobs."
+authors = [
+    {name = "William Beardall"}
+]
+license = {text = "MIT"}
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11"
+]
+dependencies = [
+    "attrs>=22",
+    "dill>=0.3",
+    "iniconfig>=1",
+    "jinja2>=3",
+    "markupsafe>=2",
+    "multiprocess>=0.70",
+    "numpy>=1.19",
+    "pandas>=1.3",
+    "pluggy>=1.0",
+    "py>=1.11",
+    "pyparsing>=3",
+    "python-dateutil>=2.8",
+    "pytz>=2022",
+    "pyyaml>=6",
+    "six>=1.16",
+    "tomli>=2",
+    "tqdm>=4"
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=2.20",
+    "pytest>=6.0",
+    "pytest-cov>=2.0",
+    "flake8>=3.9",
+    "tox>=3.24"
+]
+
+
 [tool.pytest.ini_options]
-addopts = "--cov=combinatorial_experiment"
+minversion = "8.0"
+addopts = "-ra -q --cov=combinatorial_experiment"
 testpaths = [
     "test",
 ]
-
-#[tool.mypy]
-#install_types = true
-#mypy_path = "src"
-#check_untyped_defs = true
-#ignore_missing_imports = true
-#no_implicit_optional = true
-#show_error_codes = true
-#strict_equality = true
-#warn_redundant_casts = true
-#warn_return_any = true
-#warn_unreachable = true
-#warn_unused_configs = true
-#no_implicit_reexport = true

@@ -49,6 +49,7 @@ def test_fail_experiment(temp_dir):
         os.path.join(
             Path(__file__).parent.absolute(), "configs", "experiment_config.yml"
         ),
+        "--continue_on_failure",
         "--output",
         temp_dir,
     ]

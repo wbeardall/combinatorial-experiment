@@ -25,6 +25,7 @@ from tqdm import tqdm
 from functools import cached_property, partial
 
 from combinatorial_experiment.experiment import Experiment, ExperimentSet, ExperimentStatus
+from combinatorial_experiment.tracking import update_job_state
 
 from .safe_unpickle import safe_load
 from .utils import NestedDict, get_last, safe_save
@@ -89,9 +90,10 @@ class CombinatorialExperiment(object):
         serialize: bool = False,
         run_in_band: bool = False,
         dry_run: bool = False,
-        throw_on_failure: bool = False,
+        continue_on_failure: bool = False,
     ):
         self.initialized = False
+        update_job_state(state='running', on_fail='warn')
         # NOTE: cache is deprecated.
         if experiment_function is None or variables is None:
             assert resume, 'Cannot resume experiment with no experiment function or variables'
@@ -119,7 +121,7 @@ class CombinatorialExperiment(object):
         self._variables = variables
         self._resume = resume
         self._database_path = database_path
-        self._throw_on_failure = throw_on_failure
+        self._continue_on_failure = continue_on_failure
         if isinstance(base_config, str):
             with open(base_config, "r") as f:
                 base_config = yaml.safe_load(f)
@@ -164,7 +166,7 @@ class CombinatorialExperiment(object):
             dry_run=args.dry_run,
             run_in_band=args.run_in_band,
             serialize=args.serialize,
-            throw_on_failure=args.throw_on_failure,
+            continue_on_failure=args.continue_on_failure,
         )
         return experiment.run()
 
@@ -183,7 +185,7 @@ class CombinatorialExperiment(object):
         dry_run: bool = False,
         run_in_band: bool = False,
         serialize: bool = False,
-        throw_on_failure: bool = False,
+        continue_on_failure: bool = False,
     ):
         variables = deserialize_experiment_config(experiment_config)
         return cls(
@@ -199,7 +201,7 @@ class CombinatorialExperiment(object):
             dry_run=dry_run,
             run_in_band=run_in_band,
             serialize=serialize,
-            throw_on_failure=throw_on_failure,
+            continue_on_failure=continue_on_failure,
         )
 
     @classmethod
@@ -215,7 +217,7 @@ class CombinatorialExperiment(object):
         parser.add_argument("--run_in_band", action="store_true")
         parser.add_argument("--database_path", default=None)
         parser.add_argument("--dry_run", action="store_true")
-        parser.add_argument("--throw_on_failure", action="store_true")
+        parser.add_argument("--continue_on_failure", action="store_true")
         return parser
 
     @classmethod
@@ -259,6 +261,7 @@ class CombinatorialExperiment(object):
         if self._experiment_set.complete:
             with open(os.path.join(self._experiment_dir, ".run_complete"), "w") as f:
                 f.write(str(datetime.datetime.now()))
+            update_job_state(state=ExperimentStatus.COMPLETED, on_fail='warn')
         else:
             warnings.warn("Experiment set is not complete. Not marking run complete.")
 
@@ -423,7 +426,6 @@ class CombinatorialExperiment(object):
             else:
                 metrics = output
             experiment.update(metrics=metrics, status=ExperimentStatus.COMPLETED)
-
         except Exception as e:
             outer_walltime = time.time() - outer_start
             self.logger.exception(
@@ -431,7 +433,8 @@ class CombinatorialExperiment(object):
             )
             warnings.warn(str(e))
             experiment.update(status=ExperimentStatus.FAILED, error=str(e))
-            if (self._throw_on_failure):
+            if not (self._continue_on_failure):
+                update_job_state(state=ExperimentStatus.FAILED, on_fail='warn')
                 raise e
             # Ensure we aren't saving metrics from a partial run
             metrics = {}

@@ -24,9 +24,8 @@ import yaml
 from tqdm import tqdm
 from functools import cached_property, partial
 
-from combinatorial_experiment.experiment import Experiment, ExperimentSet, ExperimentStatus
-from combinatorial_experiment.tracking import update_job_state
-
+from .experiment import Experiment, ExperimentSet, ExperimentStatus
+from .tracking import update_job_state
 from .safe_unpickle import safe_load
 from .utils import NestedDict, get_last, safe_save
 from .variables import VariableCollection, deserialize_experiment_config

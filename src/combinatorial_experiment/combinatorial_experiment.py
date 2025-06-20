@@ -24,6 +24,7 @@ import yaml
 from tqdm import tqdm
 from functools import cached_property, partial
 
+from .compression import zip_experiment
 from .experiment import Experiment, ExperimentSet, ExperimentStatus
 from .tracking import update_job_state
 from .safe_unpickle import safe_load
@@ -33,6 +34,7 @@ from .variables import VariableCollection, deserialize_experiment_config
 use_style = tuple(int(el) for el in pd.__version__.split(".")) > (1, 3, 0)
 allowed_time_symbols = ["T", "t", "Time", "time"]
 
+logger = logging.getLogger(__name__)
 
 def multiprocess_wrap(func, serialize: bool = True, dry_run: bool = False):
     def wrapper(q, config):
@@ -90,6 +92,7 @@ class CombinatorialExperiment(object):
         run_in_band: bool = False,
         dry_run: bool = False,
         continue_on_failure: bool = False,
+        archive_on_complete: bool = False,
     ):
         self.initialized = False
         update_job_state(state='running', on_fail='warn')
@@ -121,6 +124,7 @@ class CombinatorialExperiment(object):
         self._resume = resume
         self._database_path = database_path
         self._continue_on_failure = continue_on_failure
+        self._archive_on_complete = archive_on_complete
         if isinstance(base_config, str):
             with open(base_config, "r") as f:
                 base_config = yaml.safe_load(f)
@@ -230,7 +234,7 @@ class CombinatorialExperiment(object):
     def initialize(self):
         if self.initialized:
             return
-        
+
         if self._database_path is None:
             self._database_path = os.path.join(self._experiment_dir, "experiment.db")
 
@@ -238,12 +242,12 @@ class CombinatorialExperiment(object):
 
         if not os.path.exists(database_dir):
             os.makedirs(database_dir)
-        
+
         self._conn = sqlite3.connect(self._database_path)
         self._experiment_set = ExperimentSet(conn=self._conn, table_name=self.name, logger=self.logger)
 
         atexit.register(self._conn.close)
-        
+
         configs = self._variables.to_configs(self.base_config)
         self._experiment_set.update_experiments(configs, repeats=self.repeats)
 
@@ -256,11 +260,22 @@ class CombinatorialExperiment(object):
             directory = self._experiment_dir
         return os.path.exists(os.path.join(directory, ".run_complete"))
 
+
+    def maybe_archive_complete(self):
+        if self._archive_on_complete:
+            zip_experiment(self._experiment_dir)
+            ephemeral = os.environ.get('EPHEMERAL', None)
+            if ephemeral is not None:
+                dest = os.path.join(ephemeral, os.path.basename(self._experiment_dir))
+                logger.info(f"Archiving results to ephemeral directory '{dest}'.")
+                shutil.move(self._experiment_dir, dest)
+
     def mark_run_complete(self):
         if self._experiment_set.complete:
             with open(os.path.join(self._experiment_dir, ".run_complete"), "w") as f:
                 f.write(str(datetime.datetime.now()))
             update_job_state(state=ExperimentStatus.COMPLETED, on_fail='warn')
+            self.maybe_archive_complete()
         else:
             warnings.warn("Experiment set is not complete. Not marking run complete.")
 
@@ -295,19 +310,19 @@ class CombinatorialExperiment(object):
                         experiment_dir, zero_ext=False, ignore_ext=True
                     )
                     self._experiment_dir = experiment_dir
-                    print(
+                    logger.info(
                         "\n\nStarting new experiment in {}\n\n".format(experiment_dir)
                     )
                 else:
                     self._experiment_dir = experiment_dir
                     if os.path.exists(self.cache):
-                        print(
+                        logger.info(
                             "\n\nResuming experiment from {}\n\n".format(experiment_dir)
                         )
                         self.deserialize()
                     # In case the experiment directory was already created (but empty)
                     else:
-                        print(
+                        logger.info(
                             "\n\nStarting new experiment in {}\n\n".format(
                                 experiment_dir
                             )
@@ -317,18 +332,18 @@ class CombinatorialExperiment(object):
                     experiment_dir, zero_ext=False, ignore_ext=True
                 )
                 self._experiment_dir = experiment_dir
-                print("\n\nStarting new experiment in {}\n\n".format(experiment_dir))
+                logger.info("\n\nStarting new experiment in {}\n\n".format(experiment_dir))
         else:
             experiment_dir = safe_save(experiment_dir, zero_ext=False, ignore_ext=True)
             self._experiment_dir = experiment_dir
-            print("\n\nStarting new experiment in {}\n\n".format(experiment_dir))
+            logger.info("\n\nStarting new experiment in {}\n\n".format(experiment_dir))
         if self._dry_run:
             atexit.register(partial(shutil.rmtree, self._experiment_dir))
 
     @property
     def name(self):
         return os.path.basename(self._experiment_dir)
-    
+
 
     def setup(self):
         self.initialize()
@@ -360,7 +375,7 @@ class CombinatorialExperiment(object):
     def _cache_dir(self):
         cache_dir = os.path.join(self._experiment_dir, "cache")
         return cache_dir
-    
+
     @property
     def _cache_loc(self):
         cache_loc = os.path.join(self._cache_dir, f"{self._cache_base}{self._cache_ext}")
@@ -443,7 +458,7 @@ class CombinatorialExperiment(object):
 
     def records(self) -> pd.DataFrame:
         return pd.DataFrame([el.as_record() for el in self._experiment_set.experiments.values() if el.status == ExperimentStatus.COMPLETED])
-    
+
 
     def save_results(self, intermediate=False):
         records = self.records()

@@ -7,12 +7,13 @@ import importlib
 import inspect
 import logging
 import os
-import sys
-import time
 import shutil
 import sqlite3
-from typing import Callable
+import sys
+import time
 import warnings
+from functools import cached_property, partial
+from typing import Callable
 
 import dill as pickle
 
@@ -22,12 +23,11 @@ import multiprocess as mp
 import pandas as pd
 import yaml
 from tqdm import tqdm
-from functools import cached_property, partial
 
 from .compression import zip_experiment
 from .experiment import Experiment, ExperimentSet, ExperimentStatus
-from .tracking import update_job_state
 from .safe_unpickle import safe_load
+from .tracking import update_job_state
 from .utils import NestedDict, get_last, safe_save
 from .variables import VariableCollection, deserialize_experiment_config
 
@@ -35,6 +35,7 @@ use_style = tuple(int(el) for el in pd.__version__.split(".")) > (1, 3, 0)
 allowed_time_symbols = ["T", "t", "Time", "time"]
 
 logger = logging.getLogger(__name__)
+
 
 def multiprocess_wrap(func, serialize: bool = True, dry_run: bool = False):
     def wrapper(q, config):
@@ -45,7 +46,7 @@ def multiprocess_wrap(func, serialize: bool = True, dry_run: bool = False):
                 out = pickle.dumps(out)
             q.put(out)
         except Exception as e:
-            out = {"error":e}
+            out = {"error": e}
             if serialize:
                 out = pickle.dumps(out)
             q.put(out)
@@ -73,6 +74,7 @@ class CombinatorialExperiment(object):
         base_config: The base config.
         additional_config: The additional config.
     """
+
     initialized = False
     _conn = None
 
@@ -95,10 +97,12 @@ class CombinatorialExperiment(object):
         archive_on_complete: bool = False,
     ):
         self.initialized = False
-        update_job_state(state='running', on_fail='warn')
+        update_job_state(state="running", on_fail="warn")
         # NOTE: cache is deprecated.
         if experiment_function is None or variables is None:
-            assert resume, 'Cannot resume experiment with no experiment function or variables'
+            assert resume, (
+                "Cannot resume experiment with no experiment function or variables"
+            )
         if experiment_function is not None:
             self._function_source = os.path.abspath(
                 inspect.getfile(experiment_function)
@@ -107,7 +111,9 @@ class CombinatorialExperiment(object):
             if run_in_band:
                 self.experiment_function = partial(experiment_function, dry_run=dry_run)
             else:
-                self.experiment_function = multiprocess_wrap(experiment_function, serialize=serialize, dry_run=dry_run)
+                self.experiment_function = multiprocess_wrap(
+                    experiment_function, serialize=serialize, dry_run=dry_run
+                )
         else:
             self._experiment_source = None
             self._experiment_fn_name = None
@@ -170,6 +176,7 @@ class CombinatorialExperiment(object):
             run_in_band=args.run_in_band,
             serialize=args.serialize,
             continue_on_failure=args.continue_on_failure,
+            archive_on_complete=args.archive_on_complete,
         )
         return experiment.run()
 
@@ -189,6 +196,7 @@ class CombinatorialExperiment(object):
         run_in_band: bool = False,
         serialize: bool = False,
         continue_on_failure: bool = False,
+        archive_on_complete: bool = False,
     ):
         variables = deserialize_experiment_config(experiment_config)
         return cls(
@@ -205,6 +213,7 @@ class CombinatorialExperiment(object):
             run_in_band=run_in_band,
             serialize=serialize,
             continue_on_failure=continue_on_failure,
+            archive_on_complete=archive_on_complete,
         )
 
     @classmethod
@@ -221,6 +230,7 @@ class CombinatorialExperiment(object):
         parser.add_argument("--database_path", default=None)
         parser.add_argument("--dry_run", action="store_true")
         parser.add_argument("--continue_on_failure", action="store_true")
+        parser.add_argument("--archive_on_complete", action="store_true")
         return parser
 
     @classmethod
@@ -244,13 +254,14 @@ class CombinatorialExperiment(object):
             os.makedirs(database_dir)
 
         self._conn = sqlite3.connect(self._database_path)
-        self._experiment_set = ExperimentSet(conn=self._conn, table_name=self.name, logger=self.logger)
+        self._experiment_set = ExperimentSet(
+            conn=self._conn, table_name=self.name, logger=self.logger
+        )
 
         atexit.register(self._conn.close)
 
         configs = self._variables.to_configs(self.base_config)
         self._experiment_set.update_experiments(configs, repeats=self.repeats)
-
 
     def add_variable(self, variable):
         self._variables.update(variable)
@@ -260,11 +271,10 @@ class CombinatorialExperiment(object):
             directory = self._experiment_dir
         return os.path.exists(os.path.join(directory, ".run_complete"))
 
-
     def maybe_archive_complete(self):
         if self._archive_on_complete:
             zip_experiment(self._experiment_dir)
-            ephemeral = os.environ.get('EPHEMERAL', None)
+            ephemeral = os.environ.get("EPHEMERAL", None)
             if ephemeral is not None:
                 dest = os.path.join(ephemeral, os.path.basename(self._experiment_dir))
                 logger.info(f"Archiving results to ephemeral directory '{dest}'.")
@@ -274,7 +284,7 @@ class CombinatorialExperiment(object):
         if self._experiment_set.complete:
             with open(os.path.join(self._experiment_dir, ".run_complete"), "w") as f:
                 f.write(str(datetime.datetime.now()))
-            update_job_state(state=ExperimentStatus.COMPLETED, on_fail='warn')
+            update_job_state(state=ExperimentStatus.COMPLETED, on_fail="warn")
             self.maybe_archive_complete()
         else:
             warnings.warn("Experiment set is not complete. Not marking run complete.")
@@ -332,7 +342,9 @@ class CombinatorialExperiment(object):
                     experiment_dir, zero_ext=False, ignore_ext=True
                 )
                 self._experiment_dir = experiment_dir
-                logger.info("\n\nStarting new experiment in {}\n\n".format(experiment_dir))
+                logger.info(
+                    "\n\nStarting new experiment in {}\n\n".format(experiment_dir)
+                )
         else:
             experiment_dir = safe_save(experiment_dir, zero_ext=False, ignore_ext=True)
             self._experiment_dir = experiment_dir
@@ -344,12 +356,10 @@ class CombinatorialExperiment(object):
     def name(self):
         return os.path.basename(self._experiment_dir)
 
-
     def setup(self):
         self.initialize()
         self.serialize()
         self.make_gitignore()
-
 
     @cached_property
     def logger(self):
@@ -378,7 +388,9 @@ class CombinatorialExperiment(object):
 
     @property
     def _cache_loc(self):
-        cache_loc = os.path.join(self._cache_dir, f"{self._cache_base}{self._cache_ext}")
+        cache_loc = os.path.join(
+            self._cache_dir, f"{self._cache_base}{self._cache_ext}"
+        )
         return cache_loc
 
     def run(self) -> pd.DataFrame:
@@ -409,7 +421,9 @@ class CombinatorialExperiment(object):
         with open(os.path.join(savedir, "experiment_config.yml"), "w") as f:
             yaml.dump(config, f)
 
-        experiment.update_metadata(metadata={'relpath': os.path.relpath(savedir, self._experiment_dir)})
+        experiment.update_metadata(
+            metadata={"relpath": os.path.relpath(savedir, self._experiment_dir)}
+        )
         config.update({"savedir": savedir})
 
         try:
@@ -431,7 +445,9 @@ class CombinatorialExperiment(object):
                     output = pickle.loads(output)
                 p.join()
             if "error" in output:
-                raise RuntimeError(f"Experiment error: {output['error']}") from output["error"]
+                raise RuntimeError(f"Experiment error: {output['error']}") from output[
+                    "error"
+                ]
             outer_walltime = time.time() - outer_start
 
             gc.collect()
@@ -448,17 +464,22 @@ class CombinatorialExperiment(object):
             warnings.warn(str(e))
             experiment.update(status=ExperimentStatus.FAILED, error=str(e))
             if not (self._continue_on_failure):
-                update_job_state(state=ExperimentStatus.FAILED, on_fail='warn')
+                update_job_state(state=ExperimentStatus.FAILED, on_fail="warn")
                 raise e
             # Ensure we aren't saving metrics from a partial run
             metrics = {}
 
-        experiment.update_metadata(metadata={'walltime': outer_walltime})
+        experiment.update_metadata(metadata={"walltime": outer_walltime})
         self.save_results(True)
 
     def records(self) -> pd.DataFrame:
-        return pd.DataFrame([el.as_record() for el in self._experiment_set.experiments.values() if el.status == ExperimentStatus.COMPLETED])
-
+        return pd.DataFrame(
+            [
+                el.as_record()
+                for el in self._experiment_set.experiments.values()
+                if el.status == ExperimentStatus.COMPLETED
+            ]
+        )
 
     def save_results(self, intermediate=False):
         records = self.records()
@@ -480,7 +501,7 @@ class CombinatorialExperiment(object):
 
     def serialize(self):
         old_loc = self.cache + ".old"
-        if (os.path.exists(self.cache)):
+        if os.path.exists(self.cache):
             os.rename(self.cache, old_loc)
 
         unpicklable_attrs = ["experiment_function", "_conn", "_experiment_set"]
@@ -510,5 +531,7 @@ class CombinatorialExperiment(object):
         if self._run_in_band:
             self.experiment_function = experiment_function
         else:
-            self.experiment_function = multiprocess_wrap(experiment_function, serialize=self._serialize)
+            self.experiment_function = multiprocess_wrap(
+                experiment_function, serialize=self._serialize
+            )
         self.logger.info("Test object loaded from file: {}".format(self.cache))

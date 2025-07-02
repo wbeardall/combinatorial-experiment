@@ -54,6 +54,10 @@ def multiprocess_wrap(func, serialize: bool = True, dry_run: bool = False):
     return wrapper
 
 
+def experiment_complete(directory: str) -> bool:
+    return os.path.exists(os.path.join(directory, ".run_complete"))
+
+
 # TODO: Consider rewriting to cast variables to list at start of run and store.
 # This would allow much easier indexing, iterating, error checking, returning to
 # failed runs, etc.
@@ -269,7 +273,7 @@ class CombinatorialExperiment(object):
     def check_run_complete(self, directory=None):
         if directory is None:
             directory = self._experiment_dir
-        return os.path.exists(os.path.join(directory, ".run_complete"))
+        return experiment_complete(directory)
 
     def maybe_archive_complete(self):
         if self._archive_on_complete:

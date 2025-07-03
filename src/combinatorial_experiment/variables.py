@@ -1,7 +1,7 @@
 import copy
 import itertools
 from collections.abc import Iterable
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import six
@@ -63,6 +63,12 @@ class Parameter(object):
 
 
 class Variable(object):
+    key: str
+    value: List[Any]
+    name: Optional[str]
+    record: bool
+    dict: Dict[str, Any]
+
     def __init__(self, key, value, name=None, record=True, dict={}):
         self._key = key
         if not isinstance(value, Iterable):
@@ -130,6 +136,10 @@ class Variable(object):
     def flattened_name(self):
         return [self.name] if len(self.value) > 1 else []
 
+    @property
+    def flattened_key(self):
+        return [self.key] if len(self.value) > 1 else []
+
 
 class EKFoldVariable(Variable):
     def __init__(self, fold):
@@ -152,6 +162,8 @@ class IKFoldVariable(Variable):
 
 
 class VariableCollection(object):
+    _variables: List[Variable]
+
     def __init__(self, iterfn, variables):
         self._iterfn = iterfn
         self._variables = variables
@@ -179,12 +191,18 @@ class VariableCollection(object):
         names.sort()
         return names
 
+    @property
+    def flattened_key(self):
+        keys = [el for var in self._variables for el in var.flattened_key]
+        keys.sort()
+        return keys
+
     def serialize(self):
         vs = {}
         for v in self._variables:
             vs.update(v.serialize())
         return {type(self).__name__: vs}
-    
+
     def to_configs(self, base_config: Dict[str, Any]) -> List[Dict[str, Any]]:
         configs = []
         for parameters in self:
@@ -193,7 +211,6 @@ class VariableCollection(object):
                 config.update(p.dict)
             configs.append(config)
         return configs
-
 
 
 class ZippedVariable(VariableCollection):

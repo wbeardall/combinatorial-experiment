@@ -2,7 +2,9 @@ import copy
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Callable, Iterator, Optional, Union
+from typing import Callable, Dict, Iterator, Optional, Type, Union
+
+import yaml
 
 # NOTE: This is NOT the standard multiprocessing library, which uses pickle;
 # it's the one from Pathos, which uses Dill
@@ -10,7 +12,11 @@ from combinatorial_experiment.combinatorial_experiment import (
     CombinatorialExperiment,
     experiment_complete,
 )
-from combinatorial_experiment.variables import VariableCollection
+from combinatorial_experiment.utils import camel_to_snake_case
+from combinatorial_experiment.variables import (
+    VariableCollection,
+    deserialize_experiment_config,
+)
 
 
 def iteration_dir(experiment_dir: str, iteration: int) -> str:
@@ -29,13 +35,82 @@ class LastIteration:
     path: str
 
 
+def hook_type(o):
+    if isinstance(o, type):
+        name = o.__name__
+    else:
+        name = o.__class__.__name__
+    return camel_to_snake_case(name.replace("Hook", ""))
+
+
 class IterativeExperimentHook(ABC):
+    __registry__: Dict[str, Type["IterativeExperimentHook"]] = {}
     experiment_dir: str
     variables: VariableCollection
+
+    def __init_subclass__(cls, /, *, register: bool = True, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if register:
+            IterativeExperimentHook.__registry__[hook_type(cls)] = cls
+
+    @property
+    def hook_type(self) -> str:
+        return hook_type(self)
 
     def __init__(self, experiment_dir: str, variables: VariableCollection):
         self.experiment_dir = experiment_dir
         self.variables = copy.deepcopy(variables)
+
+    @classmethod
+    @abstractmethod
+    def _from_config_and_variables(
+        cls, *, experiment_dir: str, variables: VariableCollection, config: dict
+    ): ...
+
+    @classmethod
+    def _find_hook_type_and_create(
+        cls, *, experiment_dir: str, variables: VariableCollection, config: dict
+    ):
+        ht = config.get("hook_type", None)
+        if ht == hook_type(cls) or ht is None:
+            return cls._from_config_and_variables(
+                experiment_dir=experiment_dir, variables=variables, config=config
+            )
+        cls = IterativeExperimentHook.__registry__.get(ht, None)
+        if cls is None:
+            raise ValueError(f"Unknown hook type: {ht}")
+        return cls._from_config_and_variables(
+            experiment_dir=experiment_dir, variables=variables, config=config
+        )
+
+    @abstractmethod
+    def serialize_hook_config(self) -> dict: ...
+
+    def to_config(self) -> dict:
+        return {
+            "variables": self.variables.serialize(),
+            "hook_config": self.serialize_hook_config(),
+        }
+
+    @classmethod
+    def from_config(
+        cls, *, experiment_dir: str, config: Union[str, dict]
+    ) -> "IterativeExperimentHook":
+        if isinstance(config, str):
+            with open(config, "r") as f:
+                config = yaml.safe_load(f)
+        assert isinstance(config, dict)
+        if "variables" not in config:
+            raise KeyError("'variables' not found in config")
+        if "hook_config" not in config:
+            raise KeyError("'hook_config' not found in config")
+
+        variables = deserialize_experiment_config(config["variables"])
+        return cls._find_hook_type_and_create(
+            experiment_dir=experiment_dir,
+            variables=variables,
+            config=config["hook_config"],
+        )
 
     def get_last_completed_iteration(self) -> Optional[LastIteration]:
         i = 0
@@ -90,7 +165,6 @@ class IteratedExperiment:
         self,
         hook: IterativeExperimentHook,
         experiment_function: Callable = None,
-        variables: VariableCollection = None,
         database_path: str = None,
         experiment_dir: str = os.getcwd(),
         resume: bool = True,
@@ -107,7 +181,6 @@ class IteratedExperiment:
     ):
         self.hook = hook
         self.experiment_function = experiment_function
-        self.variables = variables
         self.database_path = database_path
         self.experiment_dir = experiment_dir
         self.resume = resume

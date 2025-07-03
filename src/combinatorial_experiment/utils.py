@@ -8,6 +8,19 @@ from typing import Any, Dict, List, Union
 import six
 
 
+def camel_to_snake_case(text: str) -> str:
+    """Convert CamelCase to snake_case while preserving consecutive uppercase letters."""
+    # Insert underscores before any internal uppercase letters
+    result = re.sub(r"([a-z0-9-_])([A-Z])", r"\1_\2", text)
+
+    # Insert underscores before any uppercase letters that are followed by a lowercase letter
+    result = re.sub(r"([A-Z])([A-Z][a-z])", r"\1_\2", result)
+
+    result = result.lower()
+
+    return result
+
+
 class AttrDict(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__

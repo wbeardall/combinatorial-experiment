@@ -1,5 +1,7 @@
 import copy
+import logging
 import os
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterator, Optional, Type, Union
@@ -18,15 +20,23 @@ from combinatorial_experiment.variables import (
     deserialize_experiment_config,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def iteration_dir(experiment_dir: str, iteration: int) -> str:
-    return f"{experiment_dir}/iteration_{iteration}"
+    return f"{experiment_dir}/_i_{iteration:03d}_"
+
+
+def iteration_of_dir(experiment_dir: str) -> int:
+    basename = os.path.basename(experiment_dir)
+    return int(re.match(r"_i_(\d+)_", basename).group(1))
 
 
 @dataclass
 class Generated:
     variables: VariableCollection
     experiment_dir: str
+    iteration: int
 
 
 @dataclass
@@ -145,16 +155,13 @@ class IterativeExperimentHook(ABC):
             yield r
 
 
-class IteratedExperiment:
+class IterativeExperiment:
     hook: IterativeExperimentHook
     experiment_function: Callable
-    database_path: str
     resume: bool
     base_config: dict
     additional_config: dict
     job_timeout: int
-    autoname: bool
-    repeats: int
     serialize: bool
     run_in_band: bool
     dry_run: bool
@@ -165,14 +172,10 @@ class IteratedExperiment:
         self,
         hook: IterativeExperimentHook,
         experiment_function: Callable = None,
-        database_path: str = None,
-        experiment_dir: str = os.getcwd(),
         resume: bool = True,
         base_config: dict = {},
         additional_config: dict = {},
         job_timeout: int = None,
-        autoname: bool = False,
-        repeats: int = 1,
         serialize: bool = False,
         run_in_band: bool = False,
         dry_run: bool = False,
@@ -181,14 +184,10 @@ class IteratedExperiment:
     ):
         self.hook = hook
         self.experiment_function = experiment_function
-        self.database_path = database_path
-        self.experiment_dir = experiment_dir
         self.resume = resume
         self.base_config = base_config
         self.additional_config = additional_config
         self.job_timeout = job_timeout
-        self.autoname = autoname
-        self.repeats = repeats
         self.serialize = serialize
         self.run_in_band = run_in_band
         self.dry_run = dry_run
@@ -201,7 +200,7 @@ class IteratedExperiment:
             last_experiment_dir = None
             i = 0
             while True:
-                cand = iteration_dir(self.experiment_dir, i)
+                cand = iteration_dir(self.hook.experiment_dir, i)
                 if os.path.exists(cand):
                     if not experiment_complete(cand):
                         last_experiment_dir = cand
@@ -209,20 +208,24 @@ class IteratedExperiment:
                     break
                 i += 1
             if last_experiment_dir is not None:
+                logger.info(f"Resuming experiment from '{last_experiment_dir}'")
                 CombinatorialExperiment.resume(last_experiment_dir)
 
         for g in self.hook:
+            i = g.iteration
+            logger.info(f"Running iteration {g.iteration} in '{g.experiment_dir}'")
+            # NOTE: We don't pass a database path here, because the database
+            # must be in the experiment directory for proper result selection!
             experiment = CombinatorialExperiment(
                 experiment_function=self.experiment_function,
                 variables=g.variables,
-                database_path=self.database_path,
                 experiment_dir=g.experiment_dir,
                 resume=self.resume,
                 base_config=self.base_config,
                 additional_config=self.additional_config,
                 job_timeout=self.job_timeout,
-                autoname=self.autoname,
-                repeats=self.repeats,
+                autoname=False,
+                repeats=1,
                 serialize=self.serialize,
                 run_in_band=self.run_in_band,
                 dry_run=self.dry_run,
@@ -230,3 +233,4 @@ class IteratedExperiment:
                 archive_on_complete=self.archive_on_complete,
             )
             experiment.run()
+        logger.info(f"Completed iterative experiment ({i+1} iterations)")

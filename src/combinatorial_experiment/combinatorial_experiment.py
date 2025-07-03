@@ -104,9 +104,9 @@ class CombinatorialExperiment(object):
         update_job_state(state="running", on_fail="warn")
         # NOTE: cache is deprecated.
         if experiment_function is None or variables is None:
-            assert resume, (
-                "Cannot resume experiment with no experiment function or variables"
-            )
+            assert (
+                resume
+            ), "Cannot resume experiment with no experiment function or variables"
         if experiment_function is not None:
             self._function_source = os.path.abspath(
                 inspect.getfile(experiment_function)
@@ -367,6 +367,9 @@ class CombinatorialExperiment(object):
 
     @cached_property
     def logger(self):
+        # Ensure the experiment directory exists
+        if not os.path.exists(self._experiment_dir):
+            os.makedirs(self._experiment_dir)
         # Set logging to experiment directory
         # Get logger for CombinatorialExperiment
         logger = logging.getLogger(str(self.__class__))

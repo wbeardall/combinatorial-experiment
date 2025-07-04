@@ -12,6 +12,7 @@ import yaml
 # it's the one from Pathos, which uses Dill
 from combinatorial_experiment.combinatorial_experiment import (
     CombinatorialExperiment,
+    MissingCacheError,
     experiment_complete,
 )
 from combinatorial_experiment.utils import camel_to_snake_case
@@ -209,7 +210,11 @@ class IterativeExperiment:
                 i += 1
             if last_experiment_dir is not None:
                 logger.info(f"Resuming experiment from '{last_experiment_dir}'")
-                CombinatorialExperiment.resume(last_experiment_dir)
+                try:
+                    CombinatorialExperiment.resume(last_experiment_dir)
+                except MissingCacheError:
+                    logger.warning(f"Cache file not found in {last_experiment_dir}")
+                    logger.warning("Continuing with new experiment")
 
         for g in self.hook:
             i = g.iteration
@@ -233,4 +238,4 @@ class IterativeExperiment:
                 archive_on_complete=self.archive_on_complete,
             )
             experiment.run()
-        logger.info(f"Completed iterative experiment ({i+1} iterations)")
+        logger.info(f"Completed iterative experiment ({i + 1} iterations)")

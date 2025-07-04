@@ -58,6 +58,10 @@ def experiment_complete(directory: str) -> bool:
     return os.path.exists(os.path.join(directory, ".run_complete"))
 
 
+class MissingCacheError(FileNotFoundError):
+    pass
+
+
 # TODO: Consider rewriting to cast variables to list at start of run and store.
 # This would allow much easier indexing, iterating, error checking, returning to
 # failed runs, etc.
@@ -104,9 +108,9 @@ class CombinatorialExperiment(object):
         update_job_state(state="running", on_fail="warn")
         # NOTE: cache is deprecated.
         if experiment_function is None or variables is None:
-            assert (
-                resume
-            ), "Cannot resume experiment with no experiment function or variables"
+            assert resume, (
+                "Cannot resume experiment with no experiment function or variables"
+            )
         if experiment_function is not None:
             self._function_source = os.path.abspath(
                 inspect.getfile(experiment_function)
@@ -239,7 +243,8 @@ class CombinatorialExperiment(object):
 
     @classmethod
     def resume(cls, path):
-        assert os.path.exists(os.path.join(path, "cache"))
+        if not os.path.exists(os.path.join(path, "cache")):
+            raise MissingCacheError(f"Cache file not found in {path}")
         experiment = CombinatorialExperiment(
             variables=[], experiment_dir=path, resume=True
         )
@@ -527,7 +532,7 @@ class CombinatorialExperiment(object):
             file = old_loc
             warnings.warn("Cache file not found. Using old cache file.")
         else:
-            raise FileNotFoundError("Cache file '{}' not found.".format(self.cache))
+            raise MissingCacheError("Cache file '{}' not found.".format(self.cache))
 
         with open(file, "rb") as f:
             self.__dict__.update(safe_load(f))

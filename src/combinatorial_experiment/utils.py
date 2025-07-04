@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Iterable
 from typing import Any, Dict, List, Union
 
 import six
@@ -80,8 +79,6 @@ class NestedDict(dict):
                 for k_l, v_l in lower.items():
                     new[f"{k}.{k_l}"] = v_l
             else:
-                if isinstance(v, Iterable):
-                    v = str(v)
                 new[k] = v
         return new
 

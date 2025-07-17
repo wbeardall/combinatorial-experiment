@@ -1,6 +1,6 @@
 import copy
 import itertools
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -62,6 +62,10 @@ class Parameter(object):
             return {}
 
 
+# Special-case iterables that should be treated as single values.
+WrapIterable = (six.string_types, Mapping)
+
+
 class Variable(object):
     key: str
     value: List[Any]
@@ -71,7 +75,7 @@ class Variable(object):
 
     def __init__(self, key, value, name=None, record=True, dict={}):
         self._key = key
-        if not isinstance(value, Iterable):
+        if not isinstance(value, Iterable) or isinstance(value, WrapIterable):
             value = [value]
         self._value = value
         self._name = name

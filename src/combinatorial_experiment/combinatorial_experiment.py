@@ -84,6 +84,7 @@ class CombinatorialExperiment(object):
     """
 
     initialized = False
+    _is_resuming = False
     _conn = None
 
     def __init__(
@@ -269,8 +270,10 @@ class CombinatorialExperiment(object):
 
         atexit.register(self._conn.close)
 
-        configs = self._variables.to_configs(self.base_config)
-        self._experiment_set.update_experiments(configs, repeats=self.repeats)
+        # Only update experiment set if not resuming
+        if not self._is_resuming:
+            configs = self._variables.to_configs(self.base_config)
+            self._experiment_set.update_experiments(configs, repeats=self.repeats)
 
     def add_variable(self, variable):
         self._variables.update(variable)
@@ -338,6 +341,7 @@ class CombinatorialExperiment(object):
                         logger.info(
                             "\n\nResuming experiment from {}\n\n".format(experiment_dir)
                         )
+                        self._is_resuming = True
                         self.deserialize()
                     # In case the experiment directory was already created (but empty)
                     else:

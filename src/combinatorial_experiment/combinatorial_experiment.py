@@ -269,9 +269,10 @@ class CombinatorialExperiment(object):
         )
 
         atexit.register(self._conn.close)
-
-        # Only update experiment set if not resuming
-        if not self._is_resuming:
+        if self._is_resuming:
+            self._experiment_set.pull()
+        else:
+            # Only update experiment set if not resuming
             configs = self._variables.to_configs(self.base_config)
             self._experiment_set.update_experiments(configs, repeats=self.repeats)
 

@@ -4,7 +4,7 @@ import sqlite3
 from dataclasses import asdict, dataclass
 from enum import Enum
 from sqlite3 import Connection
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 from uuid import uuid4
 
 from .utils import NestedDict, escape_identifier
@@ -229,6 +229,11 @@ class Experiment:
         self.experiment_set = experiment_set
 
 
+def get_table_names(conn: Connection) -> List[str]:
+    cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    return [row[0] for row in cursor]
+
+
 class ExperimentSet:
     conn: Connection
     table_name: str
@@ -260,8 +265,24 @@ class ExperimentSet:
         )
 
     @classmethod
-    def from_conn(cls, *, conn: Connection, table_name: str) -> "ExperimentSet":
-        cls.ensure_table(conn, table_name)
+    def from_path(cls, path: str, table_name: Optional[str] = None) -> "ExperimentSet":
+        conn = sqlite3.connect(path)
+        return cls.from_conn(conn=conn, table_name=table_name)
+
+    @classmethod
+    def from_conn(
+        cls, *, conn: Connection, table_name: Optional[str] = None
+    ) -> "ExperimentSet":
+        if table_name is None:
+            table_names = get_table_names(conn)
+            if len(table_names) == 1:
+                table_name = table_names[0]
+            else:
+                raise ValueError(
+                    f"Cannot infer table name from database with {len(table_names)}  > 1 tables"
+                )
+        else:
+            cls.ensure_table(conn, table_name)
         cursor = conn.execute(
             f"SELECT id, status, config, metrics, metadata, error FROM {escape_identifier(table_name)}"
         )

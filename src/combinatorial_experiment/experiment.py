@@ -267,6 +267,7 @@ class ExperimentSet:
     @classmethod
     def from_path(cls, path: str, table_name: Optional[str] = None) -> "ExperimentSet":
         conn = sqlite3.connect(path)
+        conn.row_factory = sqlite3.Row
         return cls.from_conn(conn=conn, table_name=table_name)
 
     @classmethod

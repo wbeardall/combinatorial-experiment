@@ -550,4 +550,7 @@ class CombinatorialExperiment(object):
             self.experiment_function = multiprocess_wrap(
                 experiment_function, serialize=self._serialize
             )
+
+        self._experiment_set.pull()
+
         self.logger.info("Test object loaded from file: {}".format(self.cache))

@@ -341,7 +341,6 @@ class CombinatorialExperiment(object):
                         logger.info(
                             "\n\nResuming experiment from {}\n\n".format(experiment_dir)
                         )
-                        self._is_resuming = True
                         self.deserialize()
                     # In case the experiment directory was already created (but empty)
                     else:
@@ -551,6 +550,8 @@ class CombinatorialExperiment(object):
                 experiment_function, serialize=self._serialize
             )
 
-        self._experiment_set.pull()
+        # Reset initialized state to allow re-initialization
+        self._is_resuming = True
+        self.initialized = False
 
         self.logger.info("Test object loaded from file: {}".format(self.cache))

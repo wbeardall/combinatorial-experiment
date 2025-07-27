@@ -1,7 +1,8 @@
 import copy
 import itertools
 from collections.abc import Iterable, Mapping
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import six
@@ -343,7 +344,7 @@ deserializable_vars = dict(
 reserved_kwargs = ["experiments", "experiment_seed", "times"]
 
 
-def deserialize_experiment_config(config):
+def deserialize_experiment_config(config: Union[str, Path, Dict[str, Any]]):
     if isinstance(config, str):
         with open(config, "r") as f:
             config = yaml.safe_load(f)

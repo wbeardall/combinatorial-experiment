@@ -236,6 +236,9 @@ class IterativeExperiment:
                 dry_run=self.dry_run,
                 continue_on_failure=self.continue_on_failure,
                 archive_on_complete=self.archive_on_complete,
+                # Disable safe save because actual directories are handled by the
+                # IterativeExperiment
+                disable_safe_save=True,
             )
             experiment.run()
         logger.info(f"Completed iterative experiment ({i + 1} iterations)")

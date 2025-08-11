@@ -35,6 +35,10 @@ use_style = tuple(int(el) for el in pd.__version__.split(".")) > (1, 3, 0)
 allowed_time_symbols = ["T", "t", "Time", "time"]
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    stream=sys.stdout,
+)
 
 
 def multiprocess_wrap(func, serialize: bool = True, dry_run: bool = False):
@@ -277,6 +281,9 @@ class CombinatorialExperiment(object):
         atexit.register(self._conn.close)
         if self._is_resuming:
             self._experiment_set.pull()
+            logger.info(
+                f"Resuming experiment ({self._experiment_set.count_completed} / {self._experiment_set.count} complete)"
+            )
         else:
             # Only update experiment set if not resuming
             configs = self._variables.to_configs(self.base_config)

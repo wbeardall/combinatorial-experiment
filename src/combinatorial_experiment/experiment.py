@@ -310,6 +310,26 @@ class ExperimentSet:
         ]
 
     @property
+    def count_pending(self) -> int:
+        return len(self.get_by_status(ExperimentStatus.PENDING))
+
+    @property
+    def count_running(self) -> int:
+        return len(self.get_by_status(ExperimentStatus.RUNNING))
+
+    @property
+    def count_completed(self) -> int:
+        return len(self.get_by_status(ExperimentStatus.COMPLETED))
+
+    @property
+    def count_failed(self) -> int:
+        return len(self.get_by_status(ExperimentStatus.FAILED))
+
+    @property
+    def count(self) -> int:
+        return len(self.experiments)
+
+    @property
     def complete(self):
         return len(self.get_incomplete()) == 0
 

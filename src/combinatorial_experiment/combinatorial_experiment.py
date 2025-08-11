@@ -104,14 +104,15 @@ class CombinatorialExperiment(object):
         dry_run: bool = False,
         continue_on_failure: bool = False,
         archive_on_complete: bool = False,
+        disable_safe_save: bool = False,
     ):
         self.initialized = False
         update_job_state(state="running", on_fail="warn")
         # NOTE: cache is deprecated.
         if experiment_function is None or variables is None:
-            assert resume, (
-                "Cannot resume experiment with no experiment function or variables"
-            )
+            assert (
+                resume
+            ), "Cannot resume experiment with no experiment function or variables"
         if experiment_function is not None:
             self._function_source = os.path.abspath(
                 inspect.getfile(experiment_function)
@@ -148,6 +149,7 @@ class CombinatorialExperiment(object):
         self.autoname = autoname
         self.job_timeout = job_timeout
         self.repeats = repeats
+        self.disable_safe_save = disable_safe_save
         try:
             mp.set_start_method("spawn")
         except RuntimeError:
@@ -186,6 +188,7 @@ class CombinatorialExperiment(object):
             serialize=args.serialize,
             continue_on_failure=args.continue_on_failure,
             archive_on_complete=args.archive_on_complete,
+            disable_safe_save=args.disable_safe_save,
         )
         return experiment.run()
 
@@ -206,6 +209,7 @@ class CombinatorialExperiment(object):
         serialize: bool = False,
         continue_on_failure: bool = False,
         archive_on_complete: bool = False,
+        disable_safe_save: bool = False,
     ):
         variables = deserialize_experiment_config(experiment_config)
         return cls(
@@ -223,6 +227,7 @@ class CombinatorialExperiment(object):
             serialize=serialize,
             continue_on_failure=continue_on_failure,
             archive_on_complete=archive_on_complete,
+            disable_safe_save=disable_safe_save,
         )
 
     @classmethod
@@ -240,6 +245,7 @@ class CombinatorialExperiment(object):
         parser.add_argument("--dry_run", action="store_true")
         parser.add_argument("--continue_on_failure", action="store_true")
         parser.add_argument("--archive_on_complete", action="store_true")
+        parser.add_argument("--disable_safe_save", action="store_true")
         return parser
 
     @classmethod
@@ -322,6 +328,9 @@ class CombinatorialExperiment(object):
             experiment_dir = os.path.join(
                 tail, head + "_" + "_".join(self._variables.flattened_name)
             )
+        if self.disable_safe_save:
+            self._experiment_dir = experiment_dir
+            return
         if resume:
             # Attempt to load last experiment
             try:

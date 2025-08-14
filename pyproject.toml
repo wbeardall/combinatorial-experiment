@@ -20,6 +20,7 @@ classifiers = [
 ]
 dependencies = [
     "attrs>=22",
+    "click>=8.1.8",
     "dill>=0.3",
     "iniconfig>=1",
     "jinja2>=3",
@@ -34,7 +35,7 @@ dependencies = [
     "pyyaml>=6",
     "six>=1.16",
     "tomli>=2",
-    "tqdm>=4"
+    "tqdm>=4",
 ]
 
 [dependency-groups]
@@ -45,6 +46,9 @@ dev = [
     "flake8>=3.9",
     "tox>=3.24"
 ]
+
+[project.scripts]
+resume-experiment = "combinatorial_experiment.interfaces.resume_experiment:resume_experiment"
 
 
 [tool.pytest.ini_options]

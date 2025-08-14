@@ -286,7 +286,7 @@ class CombinatorialExperiment(object):
             )
         else:
             # Only update experiment set if not resuming
-            configs = self._variables.to_configs(self.base_config)
+            configs = self._variables.to_configs(self.base_config or {})
             self._experiment_set.update_experiments(configs, repeats=self.repeats)
 
     def add_variable(self, variable):

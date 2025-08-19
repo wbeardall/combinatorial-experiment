@@ -69,7 +69,7 @@ class IterativeExperimentHook(ABC):
         return hook_type(self)
 
     def __init__(self, experiment_dir: str, variables: VariableCollection):
-        self.experiment_dir = experiment_dir
+        self.experiment_dir = str(experiment_dir)
         self.variables = copy.deepcopy(variables)
 
     @classmethod

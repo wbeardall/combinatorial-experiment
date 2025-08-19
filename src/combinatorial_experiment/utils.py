@@ -63,13 +63,14 @@ class NestedDict(dict):
 
     def __setitem__(self, item, value):
         item = item.split(".")
+        obj = self
         for i in range(len(item) - 1):
             try:
-                self = dict.__getitem__(self, item[i])
+                obj = dict.__getitem__(obj, item[i])
             except KeyError:
-                dict.__setitem__(self, item[i], {})
-                self = dict.__getitem__(self, item[i])
-        dict.__setitem__(self, item[-1], value)
+                dict.__setitem__(obj, item[i], {})
+                obj = dict.__getitem__(obj, item[i])
+        dict.__setitem__(obj, item[-1], value)
 
     def flatten(self: Union[Dict[Any, Any], NestedDict]):
         new = {}
@@ -85,6 +86,12 @@ class NestedDict(dict):
     def update(self, new):
         for k, v in new.items():
             self[k] = v
+
+    @classmethod
+    def unflatten(cls, d: dict) -> NestedDict:
+        new = NestedDict()
+        new.update(NestedDict.flatten(d))
+        return new
 
 
 def _get_matching_file(

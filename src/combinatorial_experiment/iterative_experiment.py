@@ -38,6 +38,7 @@ class Generated:
     variables: VariableCollection
     experiment_dir: str
     iteration: int
+    base_config: Optional[dict] = None
 
 
 @dataclass
@@ -221,12 +222,22 @@ class IterativeExperiment:
             logger.info(f"Running iteration {g.iteration} in '{g.experiment_dir}'")
             # NOTE: We don't pass a database path here, because the database
             # must be in the experiment directory for proper result selection!
+            if g.base_config is None:
+                base_config = self.base_config
+            else:
+                base_config = OmegaConf.to_object(
+                    OmegaConf.merge(
+                        OmegaConf.create(self.base_config),
+                        OmegaConf.create(g.base_config),
+                    )
+                )
+
             experiment = CombinatorialExperiment(
                 experiment_function=self.experiment_function,
                 variables=g.variables,
                 experiment_dir=g.experiment_dir,
                 resume=self.resume,
-                base_config=self.base_config,
+                base_config=base_config,
                 additional_config=self.additional_config,
                 job_timeout=self.job_timeout,
                 autoname=False,

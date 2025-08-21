@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Callable, Dict, Iterator, Optional, Type, Union
 
 import yaml
+from omegaconf import OmegaConf
 
 # NOTE: This is NOT the standard multiprocessing library, which uses pickle;
 # it's the one from Pathos, which uses Dill

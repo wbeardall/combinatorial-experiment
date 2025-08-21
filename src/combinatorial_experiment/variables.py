@@ -348,7 +348,8 @@ def deserialize_experiment_config(config: Union[str, Path, Dict[str, Any]]):
     if isinstance(config, str):
         with open(config, "r") as f:
             config = yaml.safe_load(f)
-    assert isinstance(config, dict)
+    if not isinstance(config, dict):
+        raise TypeError(f"Experiment config must be a dictionary, got {type(config)}")
     _, kwargs = _deserialize_experiment_layer(config)
     if len(kwargs["variables"]) > 1:
         return ProductVariable(**kwargs)

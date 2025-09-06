@@ -114,9 +114,9 @@ class CombinatorialExperiment(object):
         update_job_state(state="running", on_fail="warn")
         # NOTE: cache is deprecated.
         if experiment_function is None or variables is None:
-            assert (
-                resume
-            ), "Cannot resume experiment with no experiment function or variables"
+            assert resume, (
+                "Cannot resume experiment with no experiment function or variables"
+            )
         if experiment_function is not None:
             self._function_source = os.path.abspath(
                 inspect.getfile(experiment_function)
@@ -304,6 +304,8 @@ class CombinatorialExperiment(object):
             if ephemeral is not None:
                 dest = os.path.join(ephemeral, os.path.basename(self._experiment_dir))
                 logger.info(f"Archiving results to ephemeral directory '{dest}'.")
+                if os.path.exists(dest):
+                    shutil.rmtree(dest)
                 shutil.move(self._experiment_dir, dest)
 
     def mark_run_complete(self):

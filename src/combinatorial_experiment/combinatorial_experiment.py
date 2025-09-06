@@ -306,7 +306,15 @@ class CombinatorialExperiment(object):
                 logger.info(f"Archiving results to ephemeral directory '{dest}'.")
                 if os.path.exists(dest):
                     shutil.rmtree(dest)
-                shutil.move(self._experiment_dir, dest)
+                try:
+                    shutil.move(self._experiment_dir, dest)
+                except Exception as e:
+                    logger.error(
+                        f"Error archiving results to ephemeral directory '{dest}': {e}"
+                    )
+                    shutil.rmtree(self._experiment_dir)
+            else:
+                shutil.rmtree(self._experiment_dir)
 
     def mark_run_complete(self):
         if self._experiment_set.complete:
